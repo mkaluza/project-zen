@@ -145,8 +145,23 @@ static struct notifier_block nb = {
 
 static int __init app_monitor_init(void)
 {
+	struct task_struct *task;
+	struct fg_pid_struct *el;
+
 	oom_adj_register_notify(&nb);
 	printk(KERN_INFO "Zen foreground app monitor driver registered\n");
+	for_each_process(task) {
+		//printk(KERN_ERR "app_monitor: checking %s, %d, %d", task->comm, task->cred->euid, task->signal->oom_adj);
+		if (task->cred->euid >= 10000 && task->signal->oom_adj == 0) {
+			el = kmalloc(sizeof(struct fg_pid_struct), GFP_KERNEL);
+			el->pid = get_task_pid(task, PIDTYPE_PID);
+			list_add_tail(&(el->list), &fg_pids_list);
+		}
+	}
+	debug_app_list = 2;
+	check_list(0, 0);
+	debug_app_list = 0;
+
 	utime_start = stime_start = cutime_start = cstime_start =  utime_end = stime_end = cutime_end = cstime_end = cputime_zero;
 	return 0;
 }
