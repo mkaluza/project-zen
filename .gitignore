@@ -1,3 +1,5 @@
+Makefile.local
+
 # Object files
 *.o
 *.ko
@@ -27,3 +29,16 @@
 *.i*86
 *.x86_64
 *.hex
+
+# kernel stuff
+.*.tmp
+.*.ko.cmd
+.*.mod.o.cmd
+.*.o.cmd
+*.mod.c
+.tmp_versions/
+Module.symvers
+modules.order
+
+# backups
+*~
