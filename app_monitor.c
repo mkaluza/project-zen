@@ -53,6 +53,9 @@ static void check_list(int pid, int adj) {
  *   - stat.c
  * - kernel/posix-cpu-timers.c: thread_group_cputime
  * - include/linux/pid.h
+ *
+ * void set_user_nice(struct task_struct *p, long nice)
+ *
  */
 cputime_t utime_start, stime_start, cutime_start, cstime_start;
 cputime_t utime_end, stime_end, cutime_end, cstime_end;
@@ -115,6 +118,7 @@ static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, v
 			goto notfound;
 		}
 
+		set_user_nice(oldtask, 0);
 		printk(KERN_ERR "app_monitor: oldtask\n");
 		sig = oldtask->signal;
 		cutime_end = sig->cutime;
@@ -134,6 +138,7 @@ notfound:
 
 		fg_pid_nr = task->pid;
 		fg_pid = el->pid;
+		set_user_nice(task, -10);
 		put_task_struct(task);
 	}
 	return NOTIFY_DONE;
