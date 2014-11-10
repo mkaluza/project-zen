@@ -8,5 +8,5 @@ all:
 	make -C $(KDIR) M=$(PWD) modules
 clean:
 	make -C $(KDIR) M=$(PWD) clean
-install:
+install: all
 	adb shell sysrw; adb shell rmmod app_monitor; adb push app_monitor.ko /system/lib/modules/; adb shell insmod /system/lib/modules/app_monitor.ko
