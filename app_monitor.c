@@ -68,6 +68,7 @@ static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, v
 	unsigned long flags;
 	struct signal_struct *sig;
 	struct task_cputime task_time;
+	cputime_t ut, st;
 
 	//TODO lock
 
@@ -127,6 +128,8 @@ static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, v
 		stime_end = oldtask->stime;
 		printk(KERN_ERR "app_monitor: oldtask %lu %lu %lu %lu\n", utime_end, stime_end, cutime_end, cstime_end);
 		printk(KERN_ERR "app_monitor: cputime used utime: %lu, stime: %lu, cutime: %lu, cstime: %lu", utime_end-utime_start, stime_end-stime_start, cutime_end-cutime_start, cstime_end-cstime_start);
+		thread_group_times(oldtask, &ut, &st);
+		printk(KERN_ERR "app_monitor: oldtask thread_group_times: user:%lu system:%lu \n", ut, st);
 		put_task_struct(oldtask);
 notfound:
 		sig = task->signal;
