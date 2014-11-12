@@ -6,6 +6,7 @@
 #include <linux/notifier.h>
 #include <linux/list.h>
 #include <linux/pid.h>
+#include <linux/proc_fs.h>
 
 struct fg_pid_struct {
 	struct pid *pid;
@@ -21,6 +22,9 @@ extern void oom_adj_unregister_notify(struct notifier_block *nb);
 
 static u32 debug_app_list = 0;
 module_param(debug_app_list, uint, 0644);
+
+static unsigned int delay = 1;
+module_param(delay, uint, 0644);
 
 static void check_list(int pid, int adj) {
 	//go through the list and remove any pids with nonzero oom_adj, empty and system pids
@@ -151,12 +155,29 @@ static struct notifier_block nb = {
 	.notifier_call = &oom_adj_changed,
 };
 
+int proc_delay_fn(char *buf, char **start, off_t offset, int len, int *eof, void *data)
+{
+	unsigned long j0, j1; /* jiffies */
+
+	j0 = jiffies;
+	j1 = j0 + delay;
+
+	set_current_state(TASK_INTERRUPTIBLE);
+	schedule_timeout (delay);
+
+	j1 = jiffies;
+	len = sprintf(buf, "%9li %9li\n", j0, j1);
+	*start = buf;
+	return len;
+}
+
 static int __init app_monitor_init(void)
 {
 	struct task_struct *task;
 	struct fg_pid_struct *el;
 
 	oom_adj_register_notify(&nb);
+	create_proc_read_entry("app_monitor", 0, NULL, proc_delay_fn, NULL);
 	printk(KERN_INFO "Zen foreground app monitor driver registered\n");
 	for_each_process(task) {
 		//printk(KERN_ERR "app_monitor: checking %s, %d, %d", task->comm, task->cred->euid, task->signal->oom_adj);
@@ -177,6 +198,7 @@ static int __init app_monitor_init(void)
 static void __exit app_monitor_exit(void)
 {
 	oom_adj_unregister_notify(&nb);
+	remove_proc_entry("app_monitor", NULL);
 	printk(KERN_INFO "Zen foreground app monitor driver unregistered\n");
 }
  
