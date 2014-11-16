@@ -34,8 +34,10 @@ static unsigned int freq = 0;
 static u32 debug_app_list = 0;
 module_param(debug_app_list, uint, 0644);
 
-static unsigned int delay = 10;
+static unsigned int delay = HZ;
 module_param(delay, uint, 0644);
+
+static DECLARE_WAIT_QUEUE_HEAD (jiq_wait);
 
 static bool io_is_busy = true;
 
@@ -74,6 +76,7 @@ static struct task_cputime prev_app_time = {
 };
 
 static bool suspend = false;
+static bool state_changed = false;
 
 static void check_list(int pid, int adj) {
 	//go through the list and remove any pids with nonzero oom_adj, empty and system pids
@@ -150,6 +153,8 @@ static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, v
 
 	el = list_first_entry(&fg_pids_list, struct fg_pid_struct, list);
 	task = get_pid_task(el->pid, PIDTYPE_PID);
+	state_changed = true;
+	wake_up(&jiq_wait);
 
 	if (!task) {
 		fg_pid_nr = 0;
@@ -321,6 +326,8 @@ static int cpufreq_callback(struct notifier_block *nfb,
 		return 0;
 
 	freq = freqs->new/1000;
+	state_changed = true;
+	wake_up(&jiq_wait);
 	return 0;
 }
 static struct notifier_block cpufreq_notifier_block = {
@@ -332,11 +339,15 @@ static struct notifier_block cpufreq_notifier_block = {
 static void app_monitor_suspend(struct early_suspend *handler)
 {
 	suspend = true;
+	state_changed = true;
+	wake_up(&jiq_wait);
 }
 
 static void app_monitor_resume(struct early_suspend *handler)
 {
 	suspend = false;
+	state_changed = true;
+	wake_up(&jiq_wait);
 }
 
 static struct early_suspend app_monitor_early_suspend = {
@@ -347,6 +358,7 @@ static struct early_suspend app_monitor_early_suspend = {
 /* end early suspend */
 
 /* seq_file procfs */
+
 static void *my_seq_start(struct seq_file *s, loff_t *pos)
 {
 	static unsigned long counter = 0;
@@ -378,15 +390,16 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 	struct task_cputime app_time;
 	struct task_struct * task;
 	unsigned long long temp_rtime;
+	long timeout;
 
 	j0 = jiffies;
 
-	set_current_state(TASK_INTERRUPTIBLE);
-	schedule_timeout (delay);
+	timeout = wait_event_interruptible_timeout(jiq_wait, state_changed, delay);
+	state_changed = false;
 	update_load();
 
 	j1 = jiffies;
-	seq_printf(s, "%9lu %9lu", j0, j1);
+	seq_printf(s, "%9lu %9lu (%li)", j0, j1, timeout);
 	for(cpu=0; cpu <= 1; cpu++) {
 		pcpu = &per_cpu(cpuinfo, cpu);
 		seq_printf(s, " cpu%d: active %6u idle %6u", cpu, pcpu->active_time, pcpu->idle_time);
