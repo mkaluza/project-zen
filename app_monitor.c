@@ -1,12 +1,21 @@
+#include <linux/earlysuspend.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/cpufreq.h>
 #include <linux/notifier.h>
 #include <linux/list.h>
 #include <linux/pid.h>
 #include <linux/proc_fs.h>
+#include <linux/stat.h>
+#include <linux/cpu.h>
+#include <linux/cpumask.h>
+#include <linux/cpufreq.h>
+#include <linux/kernel_stat.h>
+#include <asm/cputime.h>
+#include <linux/tick.h>
 
 struct fg_pid_struct {
 	struct pid *pid;
@@ -20,11 +29,50 @@ static struct pid *fg_pid = NULL;
 extern void oom_adj_register_notify(struct notifier_block *nb);
 extern void oom_adj_unregister_notify(struct notifier_block *nb);
 
+static unsigned int freq = 0;
 static u32 debug_app_list = 0;
 module_param(debug_app_list, uint, 0644);
 
-static unsigned int delay = 1;
+static unsigned int delay = 10;
 module_param(delay, uint, 0644);
+
+static bool io_is_busy = true;
+
+struct cpufreq_interactive_cpuinfo {
+	struct timer_list cpu_timer;
+	struct timer_list cpu_slack_timer;
+	spinlock_t load_lock; /* protects the next 4 fields */
+	u64 time_in_idle;
+	u64 time_in_idle_timestamp;
+	u64 cputime_speedadj;
+	u64 cputime_speedadj_timestamp;
+	struct cpufreq_policy *policy;
+	struct cpufreq_frequency_table *freq_table;
+	spinlock_t target_freq_lock; /*protects target freq */
+	unsigned int target_freq;
+	unsigned int floor_freq;
+	unsigned int max_freq;
+	unsigned int timer_rate;
+	int timer_slack_val;
+	unsigned int min_sample_time;
+	u64 floor_validate_time;
+	u64 hispeed_validate_time;
+	struct rw_semaphore enable_sem;
+	int governor_enabled;
+	int prev_load;
+	bool limits_changed;
+	unsigned int active_time, idle_time;
+};
+
+static DEFINE_PER_CPU(struct cpufreq_interactive_cpuinfo, cpuinfo);
+
+static struct task_cputime prev_app_time = {
+	.utime = 0,
+	.stime = 0,
+	.sum_exec_runtime = 0
+};
+
+static bool suspend = false;
 
 static void check_list(int pid, int adj) {
 	//go through the list and remove any pids with nonzero oom_adj, empty and system pids
@@ -143,9 +191,11 @@ notfound:
 		stime_start = task->stime;
 		printk(KERN_ERR "app_monitor: sighand %lu %lu %lu %lu\n", utime_start, stime_start, cutime_start, cstime_start);
 
+		thread_group_cputime(task, &prev_app_time);
+
 		fg_pid_nr = task->pid;
 		fg_pid = el->pid;
-		set_user_nice(task, -10);
+		set_user_nice(task, -10);	//TODO loop over threads
 		put_task_struct(task);
 	}
 	return NOTIFY_DONE;
@@ -155,21 +205,141 @@ static struct notifier_block nb = {
 	.notifier_call = &oom_adj_changed,
 };
 
+static inline cputime64_t get_cpu_idle_time_jiffy(unsigned int cpu,
+						  cputime64_t *wall)
+{
+	cputime64_t idle_time;
+	cputime64_t cur_wall_time;
+	cputime64_t busy_time;
+
+	cur_wall_time = jiffies64_to_cputime64(get_jiffies_64());
+	busy_time = cputime64_add(kstat_cpu(cpu).cpustat.user,
+			kstat_cpu(cpu).cpustat.system);
+
+	busy_time = cputime64_add(busy_time, kstat_cpu(cpu).cpustat.irq);
+	busy_time = cputime64_add(busy_time, kstat_cpu(cpu).cpustat.softirq);
+	busy_time = cputime64_add(busy_time, kstat_cpu(cpu).cpustat.steal);
+	busy_time = cputime64_add(busy_time, kstat_cpu(cpu).cpustat.nice);
+
+	idle_time = cputime64_sub(cur_wall_time, busy_time);
+	if (wall)
+		*wall = (cputime64_t)jiffies_to_usecs(cur_wall_time);
+
+	return (cputime64_t)jiffies_to_usecs(idle_time);
+}
+
+static inline cputime64_t get_cpu_idle_time(unsigned int cpu,
+					    cputime64_t *wall)
+{
+	u64 idle_time = get_cpu_idle_time_us(cpu, wall);
+
+	if (idle_time == -1ULL)
+		idle_time = get_cpu_idle_time_jiffy(cpu, wall);
+	else if (!io_is_busy)
+		idle_time += get_cpu_iowait_time_us(cpu, wall);
+
+	return idle_time;
+}
+
+static u64 update_load(void)
+{
+	struct cpufreq_interactive_cpuinfo *pcpu;
+	u64 now;
+	u64 now_idle;
+	unsigned int delta_idle;
+	unsigned int delta_time;
+	u64 active_time;
+	int cpu;
+	for(cpu=0; cpu <= 1; cpu++) {
+		pcpu = &per_cpu(cpuinfo, cpu);
+		now_idle = get_cpu_idle_time(cpu, &now);
+		delta_idle = (unsigned int)(now_idle - pcpu->time_in_idle);
+		delta_time = (unsigned int)(now - pcpu->time_in_idle_timestamp);
+
+		if (delta_time <= delta_idle)
+			active_time = 0;
+		else
+			active_time = delta_time - delta_idle;
+
+		//pcpu->cputime_speedadj += active_time * pcpu->policy->cur;
+		pcpu->active_time = active_time;
+		pcpu->idle_time = delta_idle;
+		pcpu->time_in_idle = now_idle;
+		pcpu->time_in_idle_timestamp = now;
+	}
+	return now;
+}
+
+extern void thread_group_cputime(struct task_struct *tsk, struct task_cputime *times);
+
 int proc_delay_fn(char *buf, char **start, off_t offset, int len, int *eof, void *data)
 {
 	unsigned long j0, j1; /* jiffies */
+	int cpu;
+	struct cpufreq_interactive_cpuinfo *pcpu;
+	struct task_cputime app_time;
+	struct task_struct * task;
+	unsigned long long temp_rtime;
 
 	j0 = jiffies;
 	j1 = j0 + delay;
 
 	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout (delay);
+	update_load();
 
 	j1 = jiffies;
-	len = sprintf(buf, "%9li %9li\n", j0, j1);
+	len = sprintf(buf, "%9lu %9lu", j0, j1);
+	for(cpu=0; cpu <= 1; cpu++) {
+		pcpu = &per_cpu(cpuinfo, cpu);
+		len += sprintf(buf+len, " cpu%d: active %6u idle %6u", cpu, pcpu->active_time, pcpu->idle_time);
+	}
+	len += sprintf(buf+len, ", suspend: %d, freq: %4u", suspend, freq);
+	if (fg_pid != NULL) {
+		task = get_pid_task(fg_pid, PIDTYPE_PID);
+		thread_group_cputime(task, &app_time);
+		temp_rtime=app_time.sum_exec_runtime-prev_app_time.sum_exec_runtime;
+		do_div(temp_rtime, 1000);
+		len += sprintf(buf+len, ", app: gid %5d, utime %3lu, stime %3lu, rtime %6llu\n", task->tgid, app_time.utime-prev_app_time.utime, app_time.stime-prev_app_time.stime, temp_rtime);
+		prev_app_time = app_time;
+
+		put_task_struct(task);
+	} else
+		len += sprintf(buf+len, "%45s","\n");
 	*start = buf;
 	return len;
 }
+
+static int cpufreq_callback(struct notifier_block *nfb,
+		unsigned long event, void *data)
+{
+	struct cpufreq_freqs *freqs = data;
+
+	if (event != CPUFREQ_POSTCHANGE || freqs->cpu != 0)
+		return 0;
+
+	freq = freqs->new/1000;
+	return 0;
+}
+static struct notifier_block cpufreq_notifier_block = {
+	.notifier_call = cpufreq_callback,
+};
+
+static void app_monitor_suspend(struct early_suspend *handler)
+{
+	suspend = true;
+}
+
+static void app_monitor_resume(struct early_suspend *handler)
+{
+	suspend = false;
+}
+
+static struct early_suspend app_monitor_early_suspend = {
+	.level = EARLY_SUSPEND_LEVEL_DISABLE_FB,
+	.suspend = app_monitor_suspend,
+	.resume = app_monitor_resume,
+};
 
 static int __init app_monitor_init(void)
 {
@@ -178,6 +348,8 @@ static int __init app_monitor_init(void)
 
 	oom_adj_register_notify(&nb);
 	create_proc_read_entry("app_monitor", 0, NULL, proc_delay_fn, NULL);
+	register_early_suspend(&app_monitor_early_suspend);
+	cpufreq_register_notifier(&cpufreq_notifier_block, CPUFREQ_TRANSITION_NOTIFIER);
 	printk(KERN_INFO "Zen foreground app monitor driver registered\n");
 	for_each_process(task) {
 		//printk(KERN_ERR "app_monitor: checking %s, %d, %d", task->comm, task->cred->euid, task->signal->oom_adj);
@@ -197,8 +369,10 @@ static int __init app_monitor_init(void)
  
 static void __exit app_monitor_exit(void)
 {
-	oom_adj_unregister_notify(&nb);
+	cpufreq_unregister_notifier(&cpufreq_notifier_block, CPUFREQ_TRANSITION_NOTIFIER);
+	unregister_early_suspend(&app_monitor_early_suspend);
 	remove_proc_entry("app_monitor", NULL);
+	oom_adj_unregister_notify(&nb);
 	printk(KERN_INFO "Zen foreground app monitor driver unregistered\n");
 }
  
