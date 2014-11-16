@@ -16,6 +16,7 @@
 #include <linux/kernel_stat.h>
 #include <asm/cputime.h>
 #include <linux/tick.h>
+#include <linux/seq_file.h>
 
 struct fg_pid_struct {
 	struct pid *pid;
@@ -310,6 +311,7 @@ int proc_delay_fn(char *buf, char **start, off_t offset, int len, int *eof, void
 	return len;
 }
 
+/* end cpufreq */
 static int cpufreq_callback(struct notifier_block *nfb,
 		unsigned long event, void *data)
 {
@@ -324,7 +326,9 @@ static int cpufreq_callback(struct notifier_block *nfb,
 static struct notifier_block cpufreq_notifier_block = {
 	.notifier_call = cpufreq_callback,
 };
+/* end cpufreq */
 
+/* early_suspend */
 static void app_monitor_suspend(struct early_suspend *handler)
 {
 	suspend = true;
@@ -340,14 +344,113 @@ static struct early_suspend app_monitor_early_suspend = {
 	.suspend = app_monitor_suspend,
 	.resume = app_monitor_resume,
 };
+/* end early suspend */
+
+/* seq_file procfs */
+static void *my_seq_start(struct seq_file *s, loff_t *pos)
+{
+	static unsigned long counter = 0;
+
+	/* beginning a new sequence ? */
+	if ( *pos == 0 )
+	{
+		/* yes => return a non null value to begin the sequence */
+		update_load();
+		return &counter;
+	}
+	else
+	{
+		/* no => it's the end of the sequence, return end to stop reading */
+		//*pos = 0;
+		//return NULL;
+	}
+}
+
+static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
+{
+	//unsigned long *tmp_v = (unsigned long *)v;
+	//(*tmp_v)++;
+	//(*pos)++;
+	//return NULL;
+	unsigned long j0, j1; /* jiffies */
+	int cpu;
+	struct cpufreq_interactive_cpuinfo *pcpu;
+	struct task_cputime app_time;
+	struct task_struct * task;
+	unsigned long long temp_rtime;
+
+	j0 = jiffies;
+
+	set_current_state(TASK_INTERRUPTIBLE);
+	schedule_timeout (delay);
+	update_load();
+
+	j1 = jiffies;
+	seq_printf(s, "%9lu %9lu", j0, j1);
+	for(cpu=0; cpu <= 1; cpu++) {
+		pcpu = &per_cpu(cpuinfo, cpu);
+		seq_printf(s, " cpu%d: active %6u idle %6u", cpu, pcpu->active_time, pcpu->idle_time);
+	}
+	seq_printf(s, ", suspend: %d, freq: %4u", suspend, freq);
+	if (fg_pid != NULL) {
+		task = get_pid_task(fg_pid, PIDTYPE_PID);
+		thread_group_cputime(task, &app_time);
+		temp_rtime=app_time.sum_exec_runtime-prev_app_time.sum_exec_runtime;
+		do_div(temp_rtime, 1000);
+		seq_printf(s, ", app: gid %5d, utime %3lu, stime %3lu, rtime %6llu\n", task->tgid, app_time.utime-prev_app_time.utime, app_time.stime-prev_app_time.stime, temp_rtime);
+		prev_app_time = app_time;
+
+		put_task_struct(task);
+	} else
+		seq_printf(s, "%45s","X\n");
+	return 1;
+}
+
+static void my_seq_stop(struct seq_file *s, void *v)
+{
+/* nothing to do, we use a static value in start() */
+}
+
+static int my_seq_show(struct seq_file *s, void *v)
+{
+//	loff_t *spos = (loff_t *) v;
+
+//	seq_printf(s, "%Ld\n", *spos);
+	return 0;
+}
+
+static struct seq_operations my_seq_ops = {
+	.start = my_seq_start,
+	.next  = my_seq_next,
+	.stop  = my_seq_stop,
+	.show  = my_seq_show
+};
+
+static int my_open(struct inode *inode, struct file *file)
+{
+	return seq_open(file, &my_seq_ops);
+};
+
+static struct file_operations my_file_ops = {
+	.owner   = THIS_MODULE,
+	.open    = my_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = seq_release
+};
+/* end seq_file procfs */
 
 static int __init app_monitor_init(void)
 {
 	struct task_struct *task;
 	struct fg_pid_struct *el;
+	struct proc_dir_entry *entry;
 
 	oom_adj_register_notify(&nb);
-	create_proc_read_entry("app_monitor", 0, NULL, proc_delay_fn, NULL);
+	entry = create_proc_entry("app_monitor", 0, NULL);
+	if (entry) {
+		entry->proc_fops = &my_file_ops;
+	}
 	register_early_suspend(&app_monitor_early_suspend);
 	cpufreq_register_notifier(&cpufreq_notifier_block, CPUFREQ_TRANSITION_NOTIFIER);
 	printk(KERN_INFO "Zen foreground app monitor driver registered\n");
