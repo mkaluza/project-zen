@@ -359,6 +359,18 @@ static int __init app_monitor_init(void)
 			list_add_tail(&(el->list), &fg_pids_list);
 		}
 	}
+	if (!list_empty(&fg_pids_list)) {
+		el = list_first_entry(&fg_pids_list, struct fg_pid_struct, list);
+		task = get_pid_task(el->pid, PIDTYPE_PID);
+		if (task) {
+			thread_group_cputime(task, &prev_app_time);
+			fg_pid_nr = task->pid;
+			fg_pid = el->pid;
+			set_user_nice(task, -10);	//TODO loop over threads
+			put_task_struct(task);
+		}
+	}
+
 	debug_app_list = 2;
 	check_list(0, 0);
 	debug_app_list = 0;
