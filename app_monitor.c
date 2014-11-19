@@ -257,7 +257,7 @@ static u64 update_load(void)
 	unsigned int delta_time;
 	u64 active_time;
 	int cpu;
-	for(cpu=0; cpu <= 1; cpu++) {
+	for_each_possible_cpu(cpu) {
 		pcpu = &per_cpu(cpuinfo, cpu);
 		now_idle = get_cpu_idle_time(cpu, &now);
 		delta_idle = (unsigned int)(now_idle - pcpu->time_in_idle);
@@ -360,7 +360,7 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 
 	j1 = jiffies;
 	seq_printf(s, "%9lu %9lu (%li)", j0, j1, timeout);
-	for(cpu=0; cpu <= 1; cpu++) {
+	for_each_possible_cpu(cpu) {
 		pcpu = &per_cpu(cpuinfo, cpu);
 		seq_printf(s, " cpu%d: active %6u idle %6u", cpu, pcpu->active_time, pcpu->idle_time);
 	}
