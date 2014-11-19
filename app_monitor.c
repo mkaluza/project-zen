@@ -122,17 +122,18 @@ static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, v
 	struct task_struct *task = (struct task_struct *)t;
 	struct task_struct *oldtask;
 	struct fg_pid_struct *el;
-	unsigned long flags;
 	struct signal_struct *sig;
-	struct task_cputime task_time;
 	cputime_t ut, st;
 
 	//TODO lock
 	//TODO check if threads parent is zygote
-	if ((oom_adj != 0 && task->pid != fg_pid_nr) || (oom_adj == 0 && task->pid == fg_pid_nr))
+	if (
+		(oom_adj != 0 && task->pid != fg_pid_nr) ||	//oom_adj of non-fg app changed to non-zero
+		(oom_adj == 0 && task->pid == fg_pid_nr)	//oom_adj of fg app set to zero once again
+		)
 		return NOTIFY_DONE;
 
-	if (task->cred->euid < 10000)
+	if (task->cred->euid < 10000)				//we don't care about non android apps
 		return NOTIFY_DONE;
 
 	//app_changed = (task->pid == fg_pid);
