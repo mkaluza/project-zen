@@ -79,6 +79,24 @@ static unsigned int freq = 0, old_freq = 0;
 
 static bool state_changed = false;
 
+struct task_struct *zygote = NULL;
+
+static int find_zygote(void) {
+	struct task_struct *task, *_zygote = NULL;
+
+	if (zygote != NULL && pid_alive(zygote))
+		return true;
+
+	for_each_process(task) {
+		if (strcmp(task->comm, "zygote") == 0) {
+			_zygote = task;
+			break;
+		}
+	}
+	zygote = _zygote;
+	return (_zygote != NULL);
+}
+
 static void check_list(int pid, int adj) {
 	//go through the list and remove any pids with nonzero oom_adj, empty and system pids
 	struct list_head *pos = NULL;
@@ -91,7 +109,7 @@ static void check_list(int pid, int adj) {
 	list_for_each_safe(pos, tmp, &fg_pids_list) {
 		el = list_entry(pos, struct fg_pid_struct, list);
 		task = get_pid_task(el->pid, PIDTYPE_PID);
-		if (!task || task->signal->oom_adj != 0) {
+		if (!task || task->signal->oom_adj != 0 || (zygote != NULL && task->parent != zygote && task->real_parent != zygote)) {
 			if (debug_app_list > 1) printk(KERN_ERR "app_monitor: removing %s", task->comm);
 			put_pid(el->pid);
 			list_del(pos);
@@ -136,7 +154,10 @@ static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, v
 	if (task->cred->euid < 10000)				//we don't care about non android apps
 		return NOTIFY_DONE;
 
-	//app_changed = (task->pid == fg_pid);
+	if (find_zygote())
+		if (task->real_parent != zygote && task->parent != zygote)
+			return NOTIFY_DONE;
+
 	if (oom_adj == 0) {
 		//add it to the end of the list
 		el = kmalloc(sizeof(struct fg_pid_struct), GFP_KERNEL);
@@ -430,9 +451,10 @@ static int __init app_monitor_init(void)
 	register_early_suspend(&app_monitor_early_suspend);
 	cpufreq_register_notifier(&cpufreq_notifier_block, CPUFREQ_TRANSITION_NOTIFIER);
 	printk(KERN_INFO "Zen foreground app monitor driver registered\n");
+	find_zygote();
 	for_each_process(task) {
-		//printk(KERN_ERR "app_monitor: checking %s, %d, %d", task->comm, task->cred->euid, task->signal->oom_adj);
-		if (task->cred->euid >= 10000 && task->signal->oom_adj == 0) {
+		//printk(KERN_ERR "app_monitor: checking %s, %d, %d, zygote: %d, %d", task->comm, task->cred->euid, task->signal->oom_adj, task->parent == zygote, task->real_parent == zygote);
+		if (task->cred->euid >= 10000 && task->signal->oom_adj == 0 && (zygote == NULL || (task->parent == zygote || task->real_parent == zygote))) {
 			el = kmalloc(sizeof(struct fg_pid_struct), GFP_KERNEL);
 			el->pid = get_task_pid(task, PIDTYPE_PID);
 			list_add_tail(&(el->list), &fg_pids_list);
