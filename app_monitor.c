@@ -279,45 +279,7 @@ static u64 update_load(void)
 
 extern void thread_group_cputime(struct task_struct *tsk, struct task_cputime *times);
 
-int proc_delay_fn(char *buf, char **start, off_t offset, int len, int *eof, void *data)
-{
-	unsigned long j0, j1; /* jiffies */
-	int cpu;
-	struct cpufreq_interactive_cpuinfo *pcpu;
-	struct task_cputime app_time;
-	struct task_struct * task;
-	unsigned long long temp_rtime;
-
-	j0 = jiffies;
-	j1 = j0 + delay;
-
-	set_current_state(TASK_INTERRUPTIBLE);
-	schedule_timeout (delay);
-	update_load();
-
-	j1 = jiffies;
-	len = sprintf(buf, "%9lu %9lu", j0, j1);
-	for(cpu=0; cpu <= 1; cpu++) {
-		pcpu = &per_cpu(cpuinfo, cpu);
-		len += sprintf(buf+len, " cpu%d: active %6u idle %6u", cpu, pcpu->active_time, pcpu->idle_time);
-	}
-	len += sprintf(buf+len, ", suspend: %d, freq: %4u", suspend, freq);
-	if (fg_pid != NULL) {
-		task = get_pid_task(fg_pid, PIDTYPE_PID);
-		thread_group_cputime(task, &app_time);
-		temp_rtime=app_time.sum_exec_runtime-prev_app_time.sum_exec_runtime;
-		do_div(temp_rtime, 1000);
-		len += sprintf(buf+len, ", app: gid %5d, utime %3lu, stime %3lu, rtime %6llu\n", task->tgid, app_time.utime-prev_app_time.utime, app_time.stime-prev_app_time.stime, temp_rtime);
-		prev_app_time = app_time;
-
-		put_task_struct(task);
-	} else
-		len += sprintf(buf+len, "%45s","\n");
-	*start = buf;
-	return len;
-}
-
-/* end cpufreq */
+/* cpufreq */
 static int cpufreq_callback(struct notifier_block *nfb,
 		unsigned long event, void *data)
 {
