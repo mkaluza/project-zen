@@ -30,7 +30,6 @@ static struct pid *fg_pid = NULL;
 extern void oom_adj_register_notify(struct notifier_block *nb);
 extern void oom_adj_unregister_notify(struct notifier_block *nb);
 
-static unsigned int freq = 0;
 static u32 debug_app_list = 0;
 module_param(debug_app_list, uint, 0644);
 
@@ -75,7 +74,9 @@ static struct task_cputime prev_app_time = {
 	.sum_exec_runtime = 0
 };
 
-static bool suspend = false;
+static bool suspend = false, old_suspend = false;
+static unsigned int freq = 0, old_freq = 0;
+
 static bool state_changed = false;
 
 static void check_list(int pid, int adj) {
@@ -127,7 +128,7 @@ static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, v
 	cputime_t ut, st;
 
 	//TODO lock
-
+	//TODO check if threads parent is zygote
 	if ((oom_adj != 0 && task->pid != fg_pid_nr) || (oom_adj == 0 && task->pid == fg_pid_nr))
 		return NOTIFY_DONE;
 
@@ -326,7 +327,6 @@ static int cpufreq_callback(struct notifier_block *nfb,
 		return 0;
 
 	freq = freqs->new/1000;
-	state_changed = true;
 	wake_up(&jiq_wait);
 	return 0;
 }
@@ -339,14 +339,12 @@ static struct notifier_block cpufreq_notifier_block = {
 static void app_monitor_suspend(struct early_suspend *handler)
 {
 	suspend = true;
-	state_changed = true;
 	wake_up(&jiq_wait);
 }
 
 static void app_monitor_resume(struct early_suspend *handler)
 {
 	suspend = false;
-	state_changed = true;
 	wake_up(&jiq_wait);
 }
 
@@ -394,7 +392,7 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 
 	j0 = jiffies;
 
-	timeout = wait_event_interruptible_timeout(jiq_wait, state_changed, delay);
+	timeout = wait_event_interruptible_timeout(jiq_wait, freq != old_freq || state_changed || suspend != old_suspend, delay);
 	state_changed = false;
 	update_load();
 
@@ -404,7 +402,7 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 		pcpu = &per_cpu(cpuinfo, cpu);
 		seq_printf(s, " cpu%d: active %6u idle %6u", cpu, pcpu->active_time, pcpu->idle_time);
 	}
-	seq_printf(s, ", suspend: %d, freq: %4u", suspend, freq);
+	seq_printf(s, ", suspend: %d, freq: %4u", old_suspend, old_freq);
 	if (fg_pid != NULL) {
 		task = get_pid_task(fg_pid, PIDTYPE_PID);
 		thread_group_cputime(task, &app_time);
@@ -416,6 +414,8 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 		put_task_struct(task);
 	} else
 		seq_printf(s, "%45s","X\n");
+	old_suspend = suspend;
+	old_freq = freq;
 	return 1;
 }
 
