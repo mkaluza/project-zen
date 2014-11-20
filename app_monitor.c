@@ -392,12 +392,12 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 		thread_group_cputime(task, &app_time);
 		temp_rtime=app_time.sum_exec_runtime-prev_app_time.sum_exec_runtime;
 		do_div(temp_rtime, 1000);
-		seq_printf(s, ", app: gid %5d, utime %3lu, stime %3lu, rtime %6llu\n", task->tgid, app_time.utime-prev_app_time.utime, app_time.stime-prev_app_time.stime, temp_rtime);
+		seq_printf(s, ", app: gid %5d, utime %3lu, stime %3lu, rtime %6llu\n", task->cred->euid, app_time.utime-prev_app_time.utime, app_time.stime-prev_app_time.stime, temp_rtime);
 		prev_app_time = app_time;
 
 		put_task_struct(task);
 	} else
-		seq_printf(s, "%45s","X\n");
+		seq_printf(s, "\n");
 	old_suspend = suspend;
 	old_freq = freq;
 	return 1;
