@@ -544,6 +544,14 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 			max_load = load;
 	}
 
+	if (boosted) {
+		if (policy->cur < dbs_tuners_ins.input_boost_freq) {
+			this_dbs_info->requested_freq = dbs_tuners_ins.input_boost_freq;
+			__cpufreq_driver_target(policy, dbs_tuners_ins.input_boost_freq, CPUFREQ_RELATION_H);
+			return;
+		}
+	}
+
 	/*
 	 * break out if we 'cannot' reduce the speed as the user might
 	 * want freq_step to be zero
@@ -590,14 +598,6 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 	this_dbs_info->sampling_up_counter = 0;
 	this_dbs_info->down_skip = 0;
-
-	if (boosted) {
-		if (policy->cur < dbs_tuners_ins.input_boost_freq) {
-			this_dbs_info->requested_freq = dbs_tuners_ins.input_boost_freq;
-			__cpufreq_driver_target(policy, dbs_tuners_ins.input_boost_freq, CPUFREQ_RELATION_H);
-			return;
-		}
-	}
 
 	/*
 	 * if we cannot reduce the frequency anymore, break out early
