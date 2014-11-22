@@ -24,6 +24,7 @@
 #include <linux/ktime.h>
 #include <linux/sched.h>
 #include <linux/u8500_hotplug.h>
+#include <linux/earlysuspend.h>
 
 /*
  * dbs is used in this file as a shortform for demandbased switching
@@ -535,6 +536,42 @@ static inline void dbs_timer_exit(struct cpu_dbs_info_s *dbs_info)
 	cancel_delayed_work_sync(&dbs_info->work);
 }
 
+/* early_suspend */
+static void dbs_suspend(struct early_suspend *handler)
+{
+	suspend = true;
+}
+
+static void dbs_resume(struct early_suspend *handler)
+{
+	//unsigned int cpu;
+	struct cpu_dbs_info_s *this_dbs_info = &per_cpu(cs_cpu_dbs_info, 0);
+	struct cpufreq_policy *policy = this_dbs_info->cur_policy;
+
+	suspend = false;
+
+	//set max freq
+	__cpufreq_driver_target(
+			policy,
+			policy->max, CPUFREQ_RELATION_H);
+
+	/*
+	for_each_online_cpu(cpu) {
+		this_dbs_info = &per_cpu(cs_cpu_dbs_info, cpu);
+		__cpufreq_driver_target(
+				policy,
+				policy->max, CPUFREQ_RELATION_H);
+	}
+	*/
+}
+
+static struct early_suspend dbs_early_suspend = {
+	.level = EARLY_SUSPEND_LEVEL_DISABLE_FB,
+	.suspend = dbs_suspend,
+	.resume = dbs_resume,
+};
+/* end early suspend */
+
 static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 				   unsigned int event)
 {
@@ -599,6 +636,7 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 			cpufreq_register_notifier(
 					&dbs_cpufreq_notifier_block,
 					CPUFREQ_TRANSITION_NOTIFIER);
+			register_early_suspend(&dbs_early_suspend);
 		}
 		mutex_unlock(&dbs_mutex);
 
@@ -617,10 +655,13 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		 * Stop the timerschedule work, when this governor
 		 * is used for first time
 		 */
-		if (dbs_enable == 0)
+		if (dbs_enable == 0) {
 			cpufreq_unregister_notifier(
 					&dbs_cpufreq_notifier_block,
 					CPUFREQ_TRANSITION_NOTIFIER);
+			unregister_early_suspend(&dbs_early_suspend);
+		}
+
 
 		mutex_unlock(&dbs_mutex);
 		if (!dbs_enable)
