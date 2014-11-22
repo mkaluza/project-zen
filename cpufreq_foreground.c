@@ -678,8 +678,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	 */
 	/* Check for frequency decrease */
 
-	if (max_load < (this_dbs_info->down_threshold) ) {
-	//if (max_load < this_dbs_info->down_threshold && (!boosted || policy->cur > dbs_tuners_ins.input_boost_freq)) {
+	if (max_load < this_dbs_info->down_threshold && (!boosted || policy->cur > dbs_tuners_ins.input_boost_freq)) {
 	//	if (suspend || standby || ++(this_dbs_info->down_skip) < dbs_tuners_ins.sampling_down_factor)
 	//		return;
 
@@ -770,7 +769,6 @@ static void hotplug_input_event(struct input_handle *handle,
 		unsigned int type, unsigned int code, int value)
 {
 	u64 now;
-	unsigned int cpu;
 	struct cpu_dbs_info_s *dbs_info = &per_cpu(cs_cpu_dbs_info, 0);
 
 	standby = false;
