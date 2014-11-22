@@ -723,24 +723,9 @@ static void hotplug_input_event(struct input_handle *handle,
 	if (now - last_input_time < MIN_INPUT_INTERVAL)
 		return;
 
-	//flush_delayed_work(&dbs_info->work);
+	last_input_time = now;
 
-	/*
-	// crash...
-	dbs_info->requested_freq = dbs_tuners_ins.input_boost_freq;
-	__cpufreq_driver_target(
-			dbs_info->cur_policy,
-			dbs_tuners_ins.input_boost_freq, CPUFREQ_RELATION_H);
-	*/
-	/*
-	// crash...
-	for_each_online_cpu(cpu) {
-		dbs_info = &per_cpu(cs_cpu_dbs_info, cpu);
-		dbs_info->requested_freq = dbs_tuners_ins.input_boost_freq;
-		__cpufreq_driver_target(dbs_info->cur_policy, dbs_tuners_ins.input_boost_freq, CPUFREQ_RELATION_H);
-	}
-	*/
-	last_input_time = ktime_to_us(ktime_get());
+	flush_delayed_work(&dbs_info->work);
 }
 
 static int hotplug_input_connect(struct input_handler *handler,
