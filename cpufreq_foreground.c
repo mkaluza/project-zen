@@ -127,15 +127,15 @@ static struct dbs_tuners {
 	.up_threshold = DEF_FREQUENCY_UP_THRESHOLD,
 	.down_differential = DEF_DOWN_DIFFERENTIAL,
 	.suspend_sampling_up_factor = DEF_SAMPLING_UP_FACTOR,
-	.standby_sampling_up_factor = DEF_SAMPLING_UP_FACTOR/2,
+	.standby_sampling_up_factor = 2,
 	.sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR,
 
 	.ignore_nice = 1,
 	.freq_step = 10,
 
-	.input_boost_freq = 400000,
+	.input_boost_freq = 0,
 	.input_boost_ms = 100,
-	.suspend_max_freq = 600000,
+	.suspend_max_freq = 0,
 };
 
 static unsigned int delay;
