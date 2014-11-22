@@ -3,6 +3,7 @@
 -include Makefile.local
 
 obj-m += app_monitor.o
+obj-m += cpufreq_foreground.o
 
 all:
 	make -C $(KDIR) M=$(PWD) modules
