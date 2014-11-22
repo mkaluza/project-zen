@@ -515,18 +515,18 @@ define_one_global_rw(input_boost_ms);
 static struct attribute *dbs_attributes[] = {
 	&sampling_rate_min.attr,
 	&sampling_rate.attr,
-	&suspend_sampling_rate.attr,
-	&standby_sampling_rate.attr,
-	&suspend_sampling_up_factor.attr,
-	&standby_sampling_up_factor.attr,
 	&sampling_down_factor.attr,
+	&standby_sampling_rate.attr,
+	&standby_sampling_up_factor.attr,
+	&suspend_sampling_rate.attr,
+	&suspend_sampling_up_factor.attr,
 	&up_threshold.attr,
 	&down_differential.attr,
 	&ignore_nice_load.attr,
 	&freq_step.attr,
-	&suspend_max_freq.attr,
 	&input_boost_freq.attr,
 	&input_boost_ms.attr,
+	&suspend_max_freq.attr,
 	NULL
 };
 
