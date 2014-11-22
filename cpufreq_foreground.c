@@ -128,6 +128,7 @@ static struct dbs_tuners {
 	.down_differential = DEF_DOWN_DIFFERENTIAL,
 	.suspend_sampling_up_factor = DEF_SAMPLING_UP_FACTOR,
 	.standby_sampling_up_factor = 2,
+	.standby_delay_factor = 3,
 	.sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR,
 
 	.ignore_nice = 1,
@@ -246,6 +247,7 @@ show_one(suspend_sampling_rate, suspend_sampling_rate);
 show_one(standby_sampling_rate, standby_sampling_rate);
 show_one(suspend_sampling_up_factor, suspend_sampling_up_factor);
 show_one(standby_sampling_up_factor, standby_sampling_up_factor);
+show_one(standby_delay_factor, standby_delay_factor);
 show_one(sampling_down_factor, sampling_down_factor);
 show_one(up_threshold, up_threshold);
 show_one(down_differential, down_differential);
@@ -369,6 +371,20 @@ static ssize_t store_sampling_rate(struct kobject *a, struct attribute *b,
 	if (!standby && !suspend)
 		delay = dbs_tuners_ins._sampling_rate;
 
+	return count;
+}
+
+static ssize_t store_standby_delay_factor(struct kobject *a, struct attribute *b,
+				   const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+
+	if (ret != 1 || input < 1)
+		return -EINVAL;
+
+	dbs_tuners_ins.standby_delay_factor = input;
 	return count;
 }
 
@@ -502,6 +518,7 @@ define_one_global_rw(suspend_sampling_rate);
 define_one_global_rw(standby_sampling_rate);
 define_one_global_rw(suspend_sampling_up_factor);
 define_one_global_rw(standby_sampling_up_factor);
+define_one_global_rw(standby_delay_factor);
 define_one_global_rw(sampling_down_factor);
 define_one_global_rw(up_threshold);
 define_one_global_rw(down_differential);
@@ -518,6 +535,7 @@ static struct attribute *dbs_attributes[] = {
 	&sampling_down_factor.attr,
 	&standby_sampling_rate.attr,
 	&standby_sampling_up_factor.attr,
+	&standby_delay_factor.attr,
 	&suspend_sampling_rate.attr,
 	&suspend_sampling_up_factor.attr,
 	&up_threshold.attr,
