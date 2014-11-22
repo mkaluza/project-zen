@@ -252,6 +252,11 @@ show_one(down_differential, down_differential);
 show_one(ignore_nice_load, ignore_nice);
 show_one(freq_step, freq_step);
 
+show_one(input_boost_freq, input_boost_freq);
+show_one(input_boost_ms, input_boost_ms);
+
+show_one(suspend_max_freq, suspend_max_freq);
+
 static ssize_t store_sampling_down_factor(struct kobject *a,
 					  struct attribute *b,
 					  const char *buf, size_t count)
@@ -264,6 +269,54 @@ static ssize_t store_sampling_down_factor(struct kobject *a,
 		return -EINVAL;
 
 	dbs_tuners_ins.sampling_down_factor = input;
+	return count;
+}
+
+static ssize_t store_suspend_max_freq(struct kobject *a, struct attribute *b,
+				   const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+
+	if (ret != 1)
+		return -EINVAL;
+
+	//TODO verify
+	dbs_tuners_ins.suspend_max_freq = input;
+
+	return count;
+}
+
+static ssize_t store_input_boost_freq(struct kobject *a, struct attribute *b,
+				   const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+
+	if (ret != 1)
+		return -EINVAL;
+
+	//TODO verify
+	dbs_tuners_ins.input_boost_freq = input;
+
+	return count;
+}
+
+static ssize_t store_input_boost_ms(struct kobject *a, struct attribute *b,
+				   const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+
+	if (ret != 1)
+		return -EINVAL;
+
+	//TODO verify
+	dbs_tuners_ins.input_boost_ms = input;
+
 	return count;
 }
 
@@ -455,6 +508,10 @@ define_one_global_rw(down_differential);
 define_one_global_rw(ignore_nice_load);
 define_one_global_rw(freq_step);
 
+define_one_global_rw(suspend_max_freq);
+define_one_global_rw(input_boost_freq);
+define_one_global_rw(input_boost_ms);
+
 static struct attribute *dbs_attributes[] = {
 	&sampling_rate_min.attr,
 	&sampling_rate.attr,
@@ -467,6 +524,9 @@ static struct attribute *dbs_attributes[] = {
 	&down_differential.attr,
 	&ignore_nice_load.attr,
 	&freq_step.attr,
+	&suspend_max_freq.attr,
+	&input_boost_freq.attr,
+	&input_boost_ms.attr,
 	NULL
 };
 
