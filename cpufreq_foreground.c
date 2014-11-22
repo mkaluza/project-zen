@@ -657,7 +657,6 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	}
 
 	this_dbs_info->sampling_up_counter = 0;
-	this_dbs_info->down_skip = 0;
 
 	/*
 	 * if we cannot reduce the frequency anymore, break out early
@@ -679,8 +678,9 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	/* Check for frequency decrease */
 
 	if (max_load < this_dbs_info->down_threshold && (!boosted || policy->cur > dbs_tuners_ins.input_boost_freq)) {
-	//	if (suspend || standby || ++(this_dbs_info->down_skip) < dbs_tuners_ins.sampling_down_factor)
-	//		return;
+		if (!suspend && !standby && ++(this_dbs_info->down_skip) < dbs_tuners_ins.sampling_down_factor)
+			return;
+		this_dbs_info->down_skip = 0;
 
 		this_dbs_info->requested_freq -= freq_target;
 		if (this_dbs_info->requested_freq < policy->min)
@@ -690,6 +690,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 				CPUFREQ_RELATION_L);
 		return;
 	}
+	this_dbs_info->down_skip = 0;
 }
 
 static void do_dbs_timer(struct work_struct *work)
