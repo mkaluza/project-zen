@@ -5,11 +5,18 @@
 obj-m += app_monitor.o
 obj-m += cpufreq_dynamic.o
 
-all:
-	make -C $(KDIR) M=$(PWD) modules
+all: dynamic monitor
+
+monitor:
+	make -C $(KDIR) M=$(PWD) app_monitor.ko
+
+dynamic:
+	make -C $(KDIR) M=$(PWD) cpufreq_dynamic.ko
+
 clean:
 	make -C $(KDIR) M=$(PWD) clean
-install: all
+
+install:
 	adb shell sysrw; adb shell rmmod app_monitor; adb push app_monitor.ko /system/lib/modules/; adb shell insmod /system/lib/modules/app_monitor.ko
 	adb shell "echo performance > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor";
 	adb shell rmmod cpufreq_dynamic; adb push cpufreq_dynamic.ko /system/lib/modules/; adb shell insmod /system/lib/modules/cpufreq_dynamic.ko
