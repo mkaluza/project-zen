@@ -26,6 +26,7 @@ struct fg_pid_struct {
 LIST_HEAD(fg_pids_list);
 static int fg_pid_nr = 0;
 static struct pid *fg_pid = NULL;
+static struct task_struct *fg_task;
 
 extern void oom_adj_register_notify(struct notifier_block *nb);
 extern void oom_adj_unregister_notify(struct notifier_block *nb);
@@ -76,8 +77,7 @@ static struct task_cputime prev_app_time = {
 
 static bool suspend = false, old_suspend = false;
 static unsigned int freq = 0, old_freq = 0;
-
-static bool state_changed = false;
+static struct task_struct *old_task;
 
 struct task_struct *zygote = NULL;
 
@@ -169,6 +169,9 @@ static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, v
 	if (list_empty(&fg_pids_list)) {
 		fg_pid_nr = 0;
 		fg_pid = NULL;
+		if (fg_task) put_task_struct(fg_task);
+		fg_task = NULL;
+		wake_up(&jiq_wait);
 		printk(KERN_ERR "app_monitor: foreground app list empty");
 		//TODO trigger boost?
 		return NOTIFY_DONE;
@@ -176,7 +179,10 @@ static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, v
 
 	el = list_first_entry(&fg_pids_list, struct fg_pid_struct, list);
 	task = get_pid_task(el->pid, PIDTYPE_PID);
-	state_changed = true;
+
+	if (fg_task) put_task_struct(fg_task);
+	fg_task = task;
+
 	wake_up(&jiq_wait);
 
 	if (!task) {
@@ -225,7 +231,6 @@ notfound:
 		fg_pid_nr = task->pid;
 		fg_pid = el->pid;
 		set_user_nice(task, -10);	//TODO loop over threads
-		put_task_struct(task);
 	}
 	return NOTIFY_DONE;
 }
@@ -370,14 +375,12 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 	int cpu;
 	struct cpufreq_interactive_cpuinfo *pcpu;
 	struct task_cputime app_time;
-	struct task_struct * task;
 	unsigned long long temp_rtime;
 	long timeout;
 
 	j0 = jiffies;
 
-	timeout = wait_event_interruptible_timeout(jiq_wait, freq != old_freq || state_changed || suspend != old_suspend, delay);
-	state_changed = false;
+	timeout = wait_event_interruptible_timeout(jiq_wait, freq != old_freq || fg_task != old_task || suspend != old_suspend, delay);
 	update_load();
 
 	j1 = jiffies;
@@ -387,19 +390,21 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 		seq_printf(s, " cpu%d: active %6u idle %6u", cpu, pcpu->active_time, pcpu->idle_time);
 	}
 	seq_printf(s, ", suspend: %d, freq: %4u", old_suspend, old_freq);
-	if (fg_pid != NULL) {
-		task = get_pid_task(fg_pid, PIDTYPE_PID);
-		thread_group_cputime(task, &app_time);
+	if (old_task != NULL) {
+		thread_group_cputime(old_task, &app_time);
 		temp_rtime=app_time.sum_exec_runtime-prev_app_time.sum_exec_runtime;
 		do_div(temp_rtime, 1000);
-		seq_printf(s, ", app: gid %5d, utime %3lu, stime %3lu, rtime %6llu\n", task->cred->euid, app_time.utime-prev_app_time.utime, app_time.stime-prev_app_time.stime, temp_rtime);
+		seq_printf(s, ", app: gid %5d, utime %3lu, stime %3lu, rtime %6llu\n", old_task->cred->euid, app_time.utime-prev_app_time.utime, app_time.stime-prev_app_time.stime, temp_rtime);
 		prev_app_time = app_time;
-
-		put_task_struct(task);
 	} else
 		seq_printf(s, "\n");
 	old_suspend = suspend;
 	old_freq = freq;
+	if (old_task != fg_task) {
+		if (old_task) put_task_struct(old_task);
+		if (fg_task) get_task_struct(fg_task);
+		old_task = fg_task;
+	}
 	return 1;
 }
 
@@ -467,6 +472,7 @@ static int __init app_monitor_init(void)
 			thread_group_cputime(task, &prev_app_time);
 			fg_pid_nr = task->pid;
 			fg_pid = el->pid;
+			fg_task = task;
 			set_user_nice(task, -10);	//TODO loop over threads
 			put_task_struct(task);
 		}
