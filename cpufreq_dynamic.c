@@ -1,5 +1,5 @@
 /*
- *  drivers/cpufreq/cpufreq_foreground.c
+ *  drivers/cpufreq/cpufreq_dynamic.c
  *
  *  Copyright (C)  2001 Russell King
  *            (C)  2003 Venkatesh Pallipadi <venkatesh.pallipadi@intel.com>.
@@ -235,7 +235,7 @@ static ssize_t show_sampling_rate_min(struct kobject *kobj,
 
 define_one_global_ro(sampling_rate_min);
 
-/* cpufreq_foreground Governor Tunables */
+/* cpufreq_dynamic Governor Tunables */
 #define show_one(file_name, object)					\
 static ssize_t show_##file_name						\
 (struct kobject *kobj, struct attribute *attr, char *buf)		\
@@ -550,7 +550,7 @@ static struct attribute *dbs_attributes[] = {
 
 static struct attribute_group dbs_attr_group = {
 	.attrs = dbs_attributes,
-	.name = "foreground",
+	.name = "dynamic",
 };
 
 /************************** sysfs end ************************/
@@ -872,7 +872,7 @@ static struct input_handler hotplug_input_handler = {
 	.event          = hotplug_input_event,
 	.connect        = hotplug_input_connect,
 	.disconnect     = hotplug_input_disconnect,
-	.name           = "cpufreq_foreground",
+	.name           = "cpufreq_dynamic",
 	.id_table       = hotplug_ids,
 };
 /* input boost */
@@ -1001,11 +1001,11 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 	return 0;
 }
 
-#ifndef CONFIG_CPU_FREQ_DEFAULT_GOV_FOREGROUND
+#ifndef CONFIG_CPU_FREQ_DEFAULT_GOV_DYNAMIC
 static
 #endif
-struct cpufreq_governor cpufreq_gov_foreground = {
-	.name			= "foreground",
+struct cpufreq_governor cpufreq_gov_dynamic = {
+	.name			= "dynamic",
 	.governor		= cpufreq_governor_dbs,
 	.max_transition_latency	= TRANSITION_LATENCY_LIMIT,
 	.owner			= THIS_MODULE,
@@ -1034,22 +1034,22 @@ static int __init cpufreq_gov_dbs_init(void)
 			MIN_SAMPLING_RATE_RATIO * jiffies_to_usecs(10);
 	}
 
-	return cpufreq_register_governor(&cpufreq_gov_foreground);
+	return cpufreq_register_governor(&cpufreq_gov_dynamic);
 }
 
 static void __exit cpufreq_gov_dbs_exit(void)
 {
-	cpufreq_unregister_governor(&cpufreq_gov_foreground);
+	cpufreq_unregister_governor(&cpufreq_gov_dynamic);
 }
 
 
-MODULE_AUTHOR("Alexander Clouter <alex@digriz.org.uk>");
-MODULE_DESCRIPTION("'cpufreq_foreground' - A dynamic cpufreq governor for "
+MODULE_AUTHOR("Marcin Kaluza <mk@flex.pm>");
+MODULE_DESCRIPTION("'cpufreq_dynamic' - A dynamic cpufreq governor for "
 		"Low Latency Frequency Transition capable processors "
 		"optimised for use in a battery environment");
 MODULE_LICENSE("GPL");
 
-#ifdef CONFIG_CPU_FREQ_DEFAULT_GOV_FOREGROUND
+#ifdef CONFIG_CPU_FREQ_DEFAULT_GOV_DYNAMIC
 fs_initcall(cpufreq_gov_dbs_init);
 #else
 module_init(cpufreq_gov_dbs_init);
