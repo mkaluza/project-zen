@@ -95,7 +95,7 @@ module_param(standby, bool, 0644);
 
 /* input boost */
 
-u64 last_input_time;
+static u64 last_input_time = 0;
 #define MIN_INPUT_INTERVAL (50 * USEC_PER_MSEC)
 
 /* input boost end */
@@ -645,6 +645,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		freq_target = 5;
 
 	/* Check for frequency increase */
+	//TODO? if (max_load > (suspend ? 99 : dbs_tuners_ins.up_threshold)) {
 	if (max_load > dbs_tuners_ins.up_threshold) {
 		this_dbs_info->down_skip = 0;
 
@@ -762,6 +763,7 @@ static void dbs_resume(struct early_suspend *handler)
 	delay = usecs_to_jiffies(dbs_tuners_ins.sampling_rate);
 
 	//set max freq
+	//FIXME doesn't work when suspend_max_freq is set, which doesn't make sense...
 	__cpufreq_driver_target(
 			policy,
 			policy->max, CPUFREQ_RELATION_H);
@@ -797,8 +799,11 @@ static void hotplug_input_event(struct input_handle *handle,
 		return;
 
 	now = ktime_to_us(ktime_get());
-	if (now - last_input_time < MIN_INPUT_INTERVAL)
+	if (now - last_input_time < MIN_INPUT_INTERVAL) {
+		//if input events occur, keep the boost running, just don't flush delayed work
+		last_input_time = now;
 		return;
+	}
 
 	last_input_time = now;
 
