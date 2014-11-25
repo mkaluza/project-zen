@@ -451,6 +451,7 @@ static void *my_seq_start(struct seq_file *s, loff_t *pos)
 {
 	static unsigned long counter = 0;
 
+	//TODO add private per reader data and move all global vars there
 	/* beginning a new sequence ? */
 	if ( *pos == 0 )
 	{
@@ -482,12 +483,14 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 	j0 = jiffies;
 
 	timeout = wait_event_interruptible_timeout(jiq_wait, freq != old_freq || fg_task != old_task || suspend != old_suspend, delay);
+	//TODO for multiple readers update load only once per queue wakeup
 	update_load();
 
 	j1 = jiffies;
 	seq_printf(s, "%9lu %9lu (%li)", j0, j1, timeout);
 	seq_printf(s, ", suspend: %d, freq: %4u", old_suspend, old_freq);
 	if (old_task != NULL) {
+		//TODO move fg app time calculation to update_load and run only once pew queue wakeup
 		thread_group_cputime(old_task, &app_time);
 		temp_rtime=app_time.sum_exec_runtime-prev_app_time.sum_exec_runtime;
 		do_div(temp_rtime, 1000);
@@ -509,8 +512,12 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 		if (fg_task) get_task_struct(fg_task);
 		old_task = fg_task;
 	}
+	//TODO add time_limit and row_limit module parameters and return eof after any limit is reached - it'll make gathering data easier
+	//TODO return eof on governor switch?
 	return 1;
 }
+
+//TODO wakelocks?
 
 static void my_seq_stop(struct seq_file *s, void *v)
 {
