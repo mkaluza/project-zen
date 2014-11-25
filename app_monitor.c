@@ -283,6 +283,7 @@ static inline cputime64_t get_cpu_idle_time(unsigned int cpu,
 	return idle_time;
 }
 
+static u64 total_cpu_load, max_cpu_load, total_cpu_time;
 static u64 update_load(void)
 {
 	struct cpufreq_interactive_cpuinfo *pcpu;
@@ -292,9 +293,18 @@ static u64 update_load(void)
 	unsigned int delta_time;
 	u64 active_time;
 	int cpu;
+	total_cpu_load = max_cpu_load = total_cpu_time = 0;
 	for_each_possible_cpu(cpu) {
 		pcpu = &per_cpu(cpuinfo, cpu);
 		now_idle = get_cpu_idle_time(cpu, &now);
+		if (now_idle == 2147483647) {
+			//== -1 -> cpu is offline
+			pcpu->active_time = 0;
+			pcpu->idle_time = 0;
+			pcpu->time_in_idle_timestamp = now;
+			continue;
+		}
+
 		delta_idle = (unsigned int)(now_idle - pcpu->time_in_idle);
 		delta_time = (unsigned int)(now - pcpu->time_in_idle_timestamp);
 
@@ -308,6 +318,10 @@ static u64 update_load(void)
 		pcpu->idle_time = delta_idle;
 		pcpu->time_in_idle = now_idle;
 		pcpu->time_in_idle_timestamp = now;
+
+		total_cpu_load += active_time;
+		total_cpu_time += active_time  + delta_idle;
+		max_cpu_load = max(max_cpu_load, active_time);
 	}
 	return now;
 }
@@ -472,19 +486,22 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 
 	j1 = jiffies;
 	seq_printf(s, "%9lu %9lu (%li)", j0, j1, timeout);
-	for_each_possible_cpu(cpu) {
-		pcpu = &per_cpu(cpuinfo, cpu);
-		seq_printf(s, " cpu%d: active %6u idle %6u", cpu, pcpu->active_time, pcpu->idle_time);
-	}
 	seq_printf(s, ", suspend: %d, freq: %4u", old_suspend, old_freq);
 	if (old_task != NULL) {
 		thread_group_cputime(old_task, &app_time);
 		temp_rtime=app_time.sum_exec_runtime-prev_app_time.sum_exec_runtime;
 		do_div(temp_rtime, 1000);
-		seq_printf(s, ", app: gid %5d, utime %3lu, stime %3lu, rtime %6llu\n", old_task->cred->euid, app_time.utime-prev_app_time.utime, app_time.stime-prev_app_time.stime, temp_rtime);
+		seq_printf(s, ", app: gid %5d, utime %3lu, stime %3lu, rtime %6llu", old_task->cred->euid, app_time.utime-prev_app_time.utime, app_time.stime-prev_app_time.stime, temp_rtime);
 		prev_app_time = app_time;
 	} else
-		seq_printf(s, "\n");
+		seq_printf(s, ", app: gid %5d, utime %3lu, stime %3lu, rtime %6llu", -1, (unsigned long int)0, (unsigned long int)0, (unsigned long long)0);
+
+	seq_printf(s, ", cpu: load %llu total %llu max %llu", total_cpu_load, total_cpu_time, max_cpu_load);
+	for_each_possible_cpu(cpu) {
+		pcpu = &per_cpu(cpuinfo, cpu);
+		seq_printf(s, " cpu%d: active %6d idle %6d", cpu, pcpu->active_time, pcpu->idle_time);
+	}
+	seq_printf(s, "\n");
 	old_suspend = suspend;
 	old_freq = freq;
 	if (old_task != fg_task) {
