@@ -22,6 +22,7 @@
 /* input boost */
 
 static u64 last_input_time = 0;
+static u64 old_last_input_time = 0;
 #define MIN_INPUT_INTERVAL (50 * USEC_PER_MSEC)
 
 /* input boost end */
@@ -371,6 +372,7 @@ static void hotplug_input_event(struct input_handle *handle,
 		unsigned int type, unsigned int code, int value)
 {
 	last_input_time = ktime_to_us(ktime_get());
+	wake_up(&jiq_wait);
 }
 
 static int hotplug_input_connect(struct input_handler *handler,
@@ -479,34 +481,38 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 	struct task_cputime app_time;
 	unsigned long long temp_rtime;
 	long timeout;
+	struct timespec now;
 
 	j0 = jiffies;
 
-	timeout = wait_event_interruptible_timeout(jiq_wait, freq != old_freq || fg_task != old_task || suspend != old_suspend, delay);
+	timeout = wait_event_interruptible_timeout(jiq_wait, freq != old_freq || fg_task != old_task || suspend != old_suspend || last_input_time != old_last_input_time, delay);
 	//TODO for multiple readers update load only once per queue wakeup
 	update_load();
 
 	j1 = jiffies;
-	seq_printf(s, "%9lu %9lu (%li)", j0, j1, timeout);
-	seq_printf(s, ", suspend: %d, freq: %4u", old_suspend, old_freq);
+	getnstimeofday(&now);
+
+	seq_printf(s, "%9lu.%09lu %3d (%04li)", now.tv_sec, now.tv_nsec, (int)(j1-j0), timeout);
+	seq_printf(s, ", suspend: %d, freq: %4u, last_input_time: %12llu", old_suspend, old_freq, ktime_to_us(ktime_get()) - last_input_time);
 	if (old_task != NULL) {
 		//TODO move fg app time calculation to update_load and run only once pew queue wakeup
 		thread_group_cputime(old_task, &app_time);
 		temp_rtime=app_time.sum_exec_runtime-prev_app_time.sum_exec_runtime;
 		do_div(temp_rtime, 1000);
-		seq_printf(s, ", app: gid %5d, utime %3lu, stime %3lu, rtime %6llu", old_task->cred->euid, app_time.utime-prev_app_time.utime, app_time.stime-prev_app_time.stime, temp_rtime);
+		seq_printf(s, ", app: gid %5d, utime %3lu, stime %3lu, rtime %7llu", old_task->cred->euid, app_time.utime-prev_app_time.utime, app_time.stime-prev_app_time.stime, temp_rtime);
 		prev_app_time = app_time;
 	} else
-		seq_printf(s, ", app: gid %5d, utime %3lu, stime %3lu, rtime %6llu", -1, (unsigned long int)0, (unsigned long int)0, (unsigned long long)0);
+		seq_printf(s, ", app: gid %5d, utime %3lu, stime %3lu, rtime %7llu", -1, (unsigned long int)0, (unsigned long int)0, (unsigned long long)0);
 
-	seq_printf(s, ", cpu: load %llu total %llu max %llu", total_cpu_load, total_cpu_time, max_cpu_load);
+	seq_printf(s, ", cpu: load %7llu total %7llu max %7llu", total_cpu_load, total_cpu_time, max_cpu_load);
 	for_each_possible_cpu(cpu) {
 		pcpu = &per_cpu(cpuinfo, cpu);
-		seq_printf(s, " cpu%d: active %6d idle %6d", cpu, pcpu->active_time, pcpu->idle_time);
+		seq_printf(s, ", cpu%d: active %7d idle %7d", cpu, pcpu->active_time, pcpu->idle_time);
 	}
 	seq_printf(s, "\n");
 	old_suspend = suspend;
 	old_freq = freq;
+	old_last_input_time = last_input_time;
 	if (old_task != fg_task) {
 		if (old_task) put_task_struct(old_task);
 		if (fg_task) get_task_struct(fg_task);
