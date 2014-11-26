@@ -504,6 +504,8 @@ static void *my_seq_start(struct seq_file *s, loff_t *pos)
 	return p;
 }
 
+#define wakeup_reason(reason) reason ? "*" : "_"
+
 static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 {
 	unsigned long j0, j1; /* jiffies */
@@ -525,22 +527,31 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 	j1 = jiffies;
 	getnstimeofday(&now);
 
-	seq_printf(s, "%9lu.%09lu %3d (%04li)", now.tv_sec, now.tv_nsec, (int)(j1-j0), timeout);
-	seq_printf(s, ", suspend: %d, freq: %4u, last_input_time: %12llu", old_suspend, old_freq, ktime_to_us(ktime_get()) - last_input_time);
+	//seq_printf(s, "%9lu.%09lu %3d (%04li)(%s)", now.tv_sec, now.tv_nsec, (int)(j1-j0), timeout, wakeup_reason(timeout <= 0));
+	seq_printf(s, "%9lu.%09lu %3d (%s)", now.tv_sec, now.tv_nsec, (int)(j1-j0), wakeup_reason(timeout <= 0));
+	seq_printf(s, ", suspend(%s): %d, freq(%s): %4u, last_input_time(%s): %12llu",
+			wakeup_reason(suspend != old_suspend), old_suspend,
+			wakeup_reason(freq != old_freq), old_freq,
+			wakeup_reason(last_input_time != old_last_input_time), ktime_to_us(ktime_get()) - last_input_time);
+
 	if (old_task != NULL) {
 		//TODO move fg app time calculation to update_load and run only once pew queue wakeup
 		thread_group_cputime(old_task, &app_time);
 		temp_rtime=app_time.sum_exec_runtime-prev_app_time.sum_exec_runtime;
 		do_div(temp_rtime, 1000);
-		seq_printf(s, ", app: gid %5d, utime %3lu, stime %3lu, rtime %7llu", old_task->cred->euid, app_time.utime-prev_app_time.utime, app_time.stime-prev_app_time.stime, temp_rtime);
+		seq_printf(s, ", app(%s): gid %5d, utime %3lu, stime %3lu, rtime %7llu",
+				wakeup_reason(fg_task != old_task), old_task->cred->euid,
+				app_time.utime-prev_app_time.utime, app_time.stime-prev_app_time.stime, temp_rtime);
 		prev_app_time = app_time;
 	} else
-		seq_printf(s, ", app: gid %5d, utime %3lu, stime %3lu, rtime %7llu", -1, (unsigned long int)0, (unsigned long int)0, (unsigned long long)0);
+		seq_printf(s, ", app(%s): gid %5d, utime %3lu, stime %3lu, rtime %7llu",
+				wakeup_reason(fg_task != old_task), -1,
+				(unsigned long int)0, (unsigned long int)0, (unsigned long long)0);
 
 	seq_printf(s, ", cpu: load %7llu total %7llu max %7llu", total_cpu_load, total_cpu_time, max_cpu_load);
 	for_each_possible_cpu(cpu) {
 		pcpu = &per_cpu(cpuinfo, cpu);
-		seq_printf(s, ", cpu%d: active %7d idle %7d", cpu, pcpu->active_time, pcpu->idle_time);
+		seq_printf(s, ", cpu%u: active %7u idle %7u", cpu, pcpu->active_time, pcpu->idle_time);
 	}
 	seq_printf(s, "\n");
 	old_suspend = suspend;
