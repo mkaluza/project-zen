@@ -52,6 +52,11 @@ module_param(row_limit, uint, 0644);
 static unsigned int time_limit_sec = 0;
 module_param(time_limit_sec, uint, 0644);
 
+static atomic_t readers_count;
+module_param(readers_count, int, 0644);
+static atomic_t pending_readers_count;
+module_param(pending_readers_count, int, 0644);
+
 static DECLARE_WAIT_QUEUE_HEAD (jiq_wait);
 
 static bool io_is_busy = true;
@@ -478,6 +483,7 @@ static void *my_seq_start(struct seq_file *s, loff_t *pos)
 		}
 		s->private = p;
 
+		atomic_inc(&readers_count);
 		update_load();
 		p->start = ktime_to_timeval(ktime_get()).tv_sec;
 	}
@@ -582,6 +588,7 @@ static int my_release(struct inode *inode, struct file *file) {
 	struct seq_file *m = file->private_data;
 	if (m->private) {
 		kfree(m->private);
+		atomic_dec(&readers_count);
 	}
 	printk(KERN_ERR "app_monitor: seq_release\n");
 	return seq_release(inode, file);
@@ -613,6 +620,8 @@ static int __init app_monitor_init(void)
 	ret = input_register_handler(&hotplug_input_handler);
 	if (ret)
 		pr_err("Cannot register hotplug input handler.\n");
+	atomic_set(&readers_count, 0);
+	atomic_set(&pending_readers_count, 0);
 	printk(KERN_INFO "Zen foreground app monitor driver registered\n");
 	find_zygote();
 	for_each_process(task) {
