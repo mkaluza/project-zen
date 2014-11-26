@@ -109,12 +109,17 @@ struct task_struct *zygote = NULL;
 static int find_zygote(void) {
 	struct task_struct *task, *_zygote = NULL;
 
-	if (zygote != NULL && pid_alive(zygote))
-		return true;
+	if (zygote != NULL) {
+		if (pid_alive(zygote))
+			return true;
+		else
+			put_task_struct(zygote);
+	}
 
 	for_each_process(task) {
 		if (strcmp(task->comm, "zygote") == 0) {
 			_zygote = task;
+			get_task_struct(_zygote);
 			break;
 		}
 	}
