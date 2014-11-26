@@ -8,7 +8,7 @@ obj-m += cpufreq_dynamic.o
 all: dynamic monitor
 
 monitor:
-	make -C $(KDIR) M=$(PWD) app_monitor.ko
+	make -C $(KDIR) M=$(PWD) CFLAGS_MODULE=-fno-pic app_monitor.ko
 
 monitor_install: monitor
 	adb shell sysrw
@@ -20,7 +20,7 @@ monitor_install: monitor
 	adb shell 'cd /data/local/tmp; chmod 755 99app_monitor; for d in /data/boot.d /system/etc/init.d $$PWD; do [ -d $$d ] && break; done; [ $$d != $$PWD ] && cp 99app_monitor $$d/; nohup $$d/99app_monitor restart&'
 
 dynamic:
-	make -C $(KDIR) M=$(PWD) cpufreq_dynamic.ko
+	make -C $(KDIR) M=$(PWD) CFLAGS_MODULE=-fno-pic cpufreq_dynamic.ko
 
 dynamic_install: dynamic
 	adb shell sysrw
