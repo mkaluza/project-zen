@@ -319,7 +319,7 @@ static u64 update_load(void)
 	for_each_possible_cpu(cpu) {
 		pcpu = &per_cpu(cpuinfo, cpu);
 		now_idle = get_cpu_idle_time(cpu, &now);
-		if (now_idle == 2147483647) {
+		if (now_idle == 2147483647 || !cpu_online(cpu)) {
 			//== -1 -> cpu is offline
 			pcpu->active_time = 0;
 			pcpu->idle_time = 0;
