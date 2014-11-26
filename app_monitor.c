@@ -630,7 +630,8 @@ static int __init app_monitor_init(void)
 	entry = create_proc_entry("app_monitor", 0, NULL);
 	if (entry) {
 		entry->proc_fops = &my_file_ops;
-	}
+	} else
+		printk(KERN_ERR "app_monitor: create_proc_entry failed");
 	register_early_suspend(&app_monitor_early_suspend);
 	cpufreq_register_notifier(&cpufreq_notifier_block, CPUFREQ_TRANSITION_NOTIFIER);
 	ret = input_register_handler(&hotplug_input_handler);
