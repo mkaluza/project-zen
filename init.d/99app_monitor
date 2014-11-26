@@ -1,0 +1,23 @@
+#!/system/bin/sh
+
+insmod /system/lib/modules/app_monitor.ko
+dir=/data/local/log/app_monitor
+mkdir -p $dir
+
+(
+renice -n 19 $$
+
+echo 2000 > /sys/module/app_monitor/parameters/row_limit
+echo $((10*60)) > /sys/module/app_monitor/parameters/time_limit_sec
+
+while true
+do
+	if [ ! -f /proc/app_monitor_raw ];
+	then
+		sleep 10
+		continue
+	fi
+	TS=`date +"%Y%m%d%H%M%S"`
+	cat /proc/app_monitor_raw | gzip -1 > $dir/app_monitor.${TS}.gz
+done
+)&
