@@ -598,6 +598,57 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 	return v;
 }
 
+static void *my_seq_next_raw(struct seq_file *s, void *v, loff_t *pos)
+{
+	unsigned long j0, j1; /* jiffies */
+	int cpu;
+	struct cpufreq_interactive_cpuinfo *pcpu;
+	unsigned long long temp_rtime;
+	long timeout;
+	struct timespec now;
+	struct priv_seq_data *p = s->private;
+
+	printk(KERN_ERR "app_monitor: seq_next_raw %lli\n", *pos);
+	j0 = jiffies;
+
+	timeout = wait_event_interruptible_timeout(jiq_wait, freq != old_freq || fg_task != old_task || suspend != old_suspend || last_input_time != old_last_input_time, delay);
+	update_load();
+
+	j1 = jiffies;
+	getnstimeofday(&now);
+
+	seq_printf(s, "%lu.%09lu %d %d", now.tv_sec, now.tv_nsec, (int)(j1-j0), (timeout <= 0));
+	seq_printf(s, " susp %d %d f %d %u inp %d %llu %llu",
+			(suspend != old_suspend), old_suspend,
+			(freq != old_freq), old_freq,
+			(last_input_time != old_last_input_time), ktime_to_us(ktime_get()) - last_input_time, last_input_time);
+
+	if (old_task != NULL) {
+		temp_rtime=app_time.sum_exec_runtime-prev_app_time.sum_exec_runtime;
+		do_div(temp_rtime, 1000);
+		seq_printf(s, " app %d gid %d ut %lu st %lu rt %llu",
+				(fg_task != old_task), old_task->cred->euid,
+				app_time.utime-prev_app_time.utime, app_time.stime-prev_app_time.stime, temp_rtime);
+	} else
+		seq_printf(s, " app %d gid %d ut %lu st %lu rt %llu",
+				(fg_task != old_task), -1,
+				(unsigned long int)0, (unsigned long int)0, (unsigned long long)0);
+
+	seq_printf(s, " cpu l %llu t %llu m %llu", total_cpu_load, total_cpu_time, max_cpu_load);
+	for_each_possible_cpu(cpu) {
+		pcpu = &per_cpu(cpuinfo, cpu);
+		seq_printf(s, " c%u a %u i %u", cpu, pcpu->active_time, pcpu->idle_time);
+	}
+	seq_printf(s, "\n");
+
+	printing_done();
+
+	(*pos)++;
+	p->row_count++;
+	if (row_limit > 0 && p->row_count > row_limit) return NULL;
+	if (time_limit_sec > 0 && (ktime_to_timeval(ktime_get()).tv_sec - p->start > time_limit_sec)) return NULL;
+	return v;
+}
 //TODO wakelocks?
 
 static void my_seq_stop(struct seq_file *s, void *v)
@@ -622,6 +673,18 @@ static struct seq_operations my_seq_ops = {
 	.show  = my_seq_show
 };
 
+static struct seq_operations my_raw_seq_ops = {
+	.start = my_seq_start,
+	.next  = my_seq_next_raw,
+	.stop  = my_seq_stop,
+	.show  = my_seq_show
+};
+
+static int my_raw_open(struct inode *inode, struct file *file)
+{
+	return seq_open(file, &my_raw_seq_ops);
+};
+
 static int my_open(struct inode *inode, struct file *file)
 {
 	return seq_open(file, &my_seq_ops);
@@ -644,6 +707,14 @@ static struct file_operations my_file_ops = {
 	.llseek  = seq_lseek,
 	.release = my_release
 };
+
+static struct file_operations my_raw_file_ops = {
+	.owner   = THIS_MODULE,
+	.open    = my_raw_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = my_release
+};
 /* end seq_file procfs */
 
 static int __init app_monitor_init(void)
@@ -659,6 +730,13 @@ static int __init app_monitor_init(void)
 		entry->proc_fops = &my_file_ops;
 	} else
 		printk(KERN_ERR "app_monitor: create_proc_entry failed");
+
+	entry = create_proc_entry("app_monitor_raw", 0, NULL);
+	if (entry) {
+		entry->proc_fops = &my_raw_file_ops;
+	} else
+		printk(KERN_ERR "app_monitor: create_proc_entry failed (raw)");
+
 	register_early_suspend(&app_monitor_early_suspend);
 	cpufreq_register_notifier(&cpufreq_notifier_block, CPUFREQ_TRANSITION_NOTIFIER);
 	ret = input_register_handler(&hotplug_input_handler);
