@@ -1,4 +1,7 @@
 Makefile.local
+data/data
+
+*.sqlite?
 
 # Object files
 *.o
@@ -42,3 +45,4 @@ modules.order
 
 # backups
 *~
+*.sw?
