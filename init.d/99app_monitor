@@ -4,15 +4,24 @@ insmod /system/lib/modules/app_monitor.ko
 dir=/data/local/log/app_monitor
 pidfile=/data/local/tmp/app_monitor.pid
 
-pid=`cat $pidfile`
+if [ -f $pidfile ]; then
+	pid=`cat $pidfile`
+	if [ ! -d /proc/$pid ]; then
+		echo "stale pid ($pid) found, removing"
+		rm $pidfile
+		pid=""
+	fi
+else 
+	pid=""
+fi
 
 if [ "$1" == "stop" ]; then
 	rm $pidfile
-	kill `ps | grep " $pid " | awk '{print $2}' | sort -r`
+	[ -n "$pid" ] && kill `ps | grep " $pid " | awk '{print $2}' | sort -r`
 	exit
 elif [ "$1" == "restart" ]; then
 	rm $pidfile
-	kill `ps | grep " $pid " | awk '{print $2}'`
+	[ -n "$pid" ] && kill `ps | grep " $pid " | awk '{print $2}' | sort -r`
 	sleep 1
 fi
 
