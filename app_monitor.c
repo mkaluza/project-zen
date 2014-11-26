@@ -46,6 +46,12 @@ module_param(debug_app_list, uint, 0644);
 static unsigned int delay = HZ;
 module_param(delay, uint, 0644);
 
+static unsigned int row_limit = 1000;
+module_param(row_limit, uint, 0644);
+
+static unsigned int time_limit_sec = 0;
+module_param(time_limit_sec, uint, 0644);
+
 static DECLARE_WAIT_QUEUE_HEAD (jiq_wait);
 
 static bool io_is_busy = true;
@@ -77,6 +83,11 @@ struct cpufreq_interactive_cpuinfo {
 };
 
 static DEFINE_PER_CPU(struct cpufreq_interactive_cpuinfo, cpuinfo);
+
+struct priv_seq_data {
+	long start;
+	unsigned long row_count;
+};
 
 static struct task_cputime prev_app_time = {
 	.utime = 0,
@@ -451,30 +462,39 @@ static struct input_handler hotplug_input_handler = {
 
 static void *my_seq_start(struct seq_file *s, loff_t *pos)
 {
-	static unsigned long counter = 0;
+	struct priv_seq_data *p = s->private;
 
 	//TODO add private per reader data and move all global vars there
 	/* beginning a new sequence ? */
+	printk(KERN_ERR "app_monitor: seq_start %lli, priv: %d\n", *pos, s->private == NULL);
+
 	if ( *pos == 0 )
 	{
 		/* yes => return a non null value to begin the sequence */
+		p = kzalloc(sizeof(struct priv_seq_data), GFP_KERNEL);
+		if (!p) {
+			printk(KERN_ERR "app_monitor: failed to allocate memory\n");
+			return ERR_PTR(-ENOMEM);
+		}
+		s->private = p;
+
 		update_load();
-		return &counter;
+		p->start = ktime_to_timeval(ktime_get()).tv_sec;
 	}
 	else
 	{
+		printk(KERN_ERR "app_monitor: seq_start - rows %lu, time %li\n", p->row_count, ktime_to_timeval(ktime_get()).tv_sec - p->start);
+		if ((row_limit > 0 && p->row_count > row_limit) || (time_limit_sec > 0 && (ktime_to_timeval(ktime_get()).tv_sec - p->start > time_limit_sec)))
+		{
+			return NULL;
+		}
 		/* no => it's the end of the sequence, return end to stop reading */
-		//*pos = 0;
-		//return NULL;
 	}
+	return p;
 }
 
 static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 {
-	//unsigned long *tmp_v = (unsigned long *)v;
-	//(*tmp_v)++;
-	//(*pos)++;
-	//return NULL;
 	unsigned long j0, j1; /* jiffies */
 	int cpu;
 	struct cpufreq_interactive_cpuinfo *pcpu;
@@ -482,7 +502,9 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 	unsigned long long temp_rtime;
 	long timeout;
 	struct timespec now;
+	struct priv_seq_data *p = s->private;
 
+	printk(KERN_ERR "app_monitor: seq_next %lli\n", *pos);
 	j0 = jiffies;
 
 	timeout = wait_event_interruptible_timeout(jiq_wait, freq != old_freq || fg_task != old_task || suspend != old_suspend || last_input_time != old_last_input_time, delay);
@@ -520,7 +542,11 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 	}
 	//TODO add time_limit and row_limit module parameters and return eof after any limit is reached - it'll make gathering data easier
 	//TODO return eof on governor switch?
-	return 1;
+	(*pos)++;
+	p->row_count++;
+	if (row_limit > 0 && p->row_count > row_limit) return NULL;
+	if (time_limit_sec > 0 && (ktime_to_timeval(ktime_get()).tv_sec - p->start > time_limit_sec)) return NULL;
+	return v;
 }
 
 //TODO wakelocks?
@@ -528,6 +554,8 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 static void my_seq_stop(struct seq_file *s, void *v)
 {
 /* nothing to do, we use a static value in start() */
+	printk(KERN_ERR "app_monitor: seq_stop\n");
+	//kfree(v);
 }
 
 static int my_seq_show(struct seq_file *s, void *v)
@@ -550,12 +578,21 @@ static int my_open(struct inode *inode, struct file *file)
 	return seq_open(file, &my_seq_ops);
 };
 
+static int my_release(struct inode *inode, struct file *file) {
+	struct seq_file *m = file->private_data;
+	if (m->private) {
+		kfree(m->private);
+	}
+	printk(KERN_ERR "app_monitor: seq_release\n");
+	return seq_release(inode, file);
+}
+
 static struct file_operations my_file_ops = {
 	.owner   = THIS_MODULE,
 	.open    = my_open,
 	.read    = seq_read,
 	.llseek  = seq_lseek,
-	.release = seq_release
+	.release = my_release
 };
 /* end seq_file procfs */
 
