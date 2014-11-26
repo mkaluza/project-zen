@@ -526,8 +526,8 @@ static void *my_seq_start(struct seq_file *s, loff_t *pos)
 		}
 		s->private = p;
 
-		atomic_inc(&readers_count);
 		update_load();
+		atomic_inc(&readers_count);
 		p->start = ktime_to_timeval(ktime_get()).tv_sec;
 	}
 	else
@@ -697,6 +697,10 @@ static int my_release(struct inode *inode, struct file *file) {
 		atomic_dec(&readers_count);
 	}
 	printk(KERN_ERR "app_monitor: seq_release\n");
+	//FIXME!!! when file is read with cat, and cat is interrupted with ^C
+	//.release isn't called immediately - only at module unload
+	//after module reload, proc file becomes unusable (Invalid argument)
+	//it doesn't happen with dd
 	return seq_release(inode, file);
 }
 
@@ -781,6 +785,7 @@ static void __exit app_monitor_exit(void)
 	unregister_early_suspend(&app_monitor_early_suspend);
 	input_unregister_handler(&hotplug_input_handler);
 	remove_proc_entry("app_monitor", NULL);
+	remove_proc_entry("app_monitor_raw", NULL);
 	oom_adj_unregister_notify(&nb);
 	printk(KERN_INFO "Zen foreground app monitor driver unregistered\n");
 }
