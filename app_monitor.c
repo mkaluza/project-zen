@@ -18,6 +18,7 @@
 #include <linux/tick.h>
 #include <linux/seq_file.h>
 #include <linux/input.h>
+#include <linux/atomic.h>
 
 /* input boost */
 
@@ -52,10 +53,11 @@ module_param(row_limit, uint, 0644);
 static unsigned int time_limit_sec = 0;
 module_param(time_limit_sec, uint, 0644);
 
-static atomic_t readers_count;
-module_param(readers_count, int, 0644);
-static atomic_t pending_readers_count;
-module_param(pending_readers_count, int, 0644);
+static atomic_t readers_count = ATOMIC_INIT(0);
+module_param_named(readers_count, readers_count.counter, int, 0644);
+static atomic_t pending_readers_count = ATOMIC_INIT(0);
+module_param_named(pending_readers_count, pending_readers_count.counter, int, 0644);
+//static spinlock_t pending_readers_lock;
 
 static DECLARE_WAIT_QUEUE_HEAD (jiq_wait);
 
@@ -94,6 +96,7 @@ struct priv_seq_data {
 	unsigned long row_count;
 };
 
+static struct task_cputime app_time;
 static struct task_cputime prev_app_time = {
 	.utime = 0,
 	.stime = 0,
@@ -315,7 +318,21 @@ static u64 update_load(void)
 	unsigned int delta_time;
 	u64 active_time;
 	int cpu;
+	int rc, prc;
+
 	total_cpu_load = max_cpu_load = total_cpu_time = 0;
+
+	//TODO spinlock
+	prc = atomic_read(&pending_readers_count);
+	if (prc > 0)
+		return 0;
+	rc = atomic_read(&readers_count);
+	prc = atomic_add_return(rc, &pending_readers_count);
+	if (prc > rc) {
+		atomic_sub(rc, &pending_readers_count);
+		return 0;
+	}
+
 	for_each_possible_cpu(cpu) {
 		pcpu = &per_cpu(cpuinfo, cpu);
 		now_idle = get_cpu_idle_time(cpu, &now);
@@ -345,7 +362,29 @@ static u64 update_load(void)
 		total_cpu_time += active_time  + delta_idle;
 		max_cpu_load = max(max_cpu_load, active_time);
 	}
+	if (old_task != NULL) {
+		thread_group_cputime(old_task, &app_time);
+	} else {
+		app_time.utime = app_time.stime = 0;
+		app_time.sum_exec_runtime = 0;
+	}
 	return now;
+}
+
+static bool printing_done(void) {
+	int prc = atomic_read(&pending_readers_count);
+	if (prc == 1) {
+		old_suspend = suspend;
+		old_freq = freq;
+		old_last_input_time = last_input_time;
+		prev_app_time = app_time;
+		if (old_task != fg_task) {
+			if (old_task) put_task_struct(old_task);
+			if (fg_task) get_task_struct(fg_task);
+			old_task = fg_task;
+		}
+	}
+	return !atomic_dec_and_test(&pending_readers_count);
 }
 
 extern void thread_group_cputime(struct task_struct *tsk, struct task_cputime *times);
@@ -474,7 +513,6 @@ static void *my_seq_start(struct seq_file *s, loff_t *pos)
 {
 	struct priv_seq_data *p = s->private;
 
-	//TODO add private per reader data and move all global vars there
 	/* beginning a new sequence ? */
 	printk(KERN_ERR "app_monitor: seq_start %lli, priv: %d\n", *pos, s->private == NULL);
 
@@ -511,7 +549,6 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 	unsigned long j0, j1; /* jiffies */
 	int cpu;
 	struct cpufreq_interactive_cpuinfo *pcpu;
-	struct task_cputime app_time;
 	unsigned long long temp_rtime;
 	long timeout;
 	struct timespec now;
@@ -521,7 +558,6 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 	j0 = jiffies;
 
 	timeout = wait_event_interruptible_timeout(jiq_wait, freq != old_freq || fg_task != old_task || suspend != old_suspend || last_input_time != old_last_input_time, delay);
-	//TODO for multiple readers update load only once per queue wakeup
 	update_load();
 
 	j1 = jiffies;
@@ -535,14 +571,11 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 			wakeup_reason(last_input_time != old_last_input_time), ktime_to_us(ktime_get()) - last_input_time);
 
 	if (old_task != NULL) {
-		//TODO move fg app time calculation to update_load and run only once pew queue wakeup
-		thread_group_cputime(old_task, &app_time);
 		temp_rtime=app_time.sum_exec_runtime-prev_app_time.sum_exec_runtime;
 		do_div(temp_rtime, 1000);
 		seq_printf(s, ", app(%s): gid %5d, utime %3lu, stime %3lu, rtime %7llu",
 				wakeup_reason(fg_task != old_task), old_task->cred->euid,
 				app_time.utime-prev_app_time.utime, app_time.stime-prev_app_time.stime, temp_rtime);
-		prev_app_time = app_time;
 	} else
 		seq_printf(s, ", app(%s): gid %5d, utime %3lu, stime %3lu, rtime %7llu",
 				wakeup_reason(fg_task != old_task), -1,
@@ -554,15 +587,9 @@ static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
 		seq_printf(s, ", cpu%u: active %7u idle %7u", cpu, pcpu->active_time, pcpu->idle_time);
 	}
 	seq_printf(s, "\n");
-	old_suspend = suspend;
-	old_freq = freq;
-	old_last_input_time = last_input_time;
-	if (old_task != fg_task) {
-		if (old_task) put_task_struct(old_task);
-		if (fg_task) get_task_struct(fg_task);
-		old_task = fg_task;
-	}
-	//TODO add time_limit and row_limit module parameters and return eof after any limit is reached - it'll make gathering data easier
+
+	printing_done();
+
 	//TODO return eof on governor switch?
 	(*pos)++;
 	p->row_count++;
