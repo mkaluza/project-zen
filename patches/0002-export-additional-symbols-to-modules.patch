@@ -1,13 +1,26 @@
-From 1e60b3434cde61a20b2b60ba73ca35356fcc7562 Mon Sep 17 00:00:00 2001
+From 9c4bcb78ed236a9fc982d95809a91831336ed2c2 Mon Sep 17 00:00:00 2001
 From: Marcin Kaluza <marcin.kaluza@trioptimum.com>
 Date: Sat, 1 Nov 2014 13:56:11 +0100
-Subject: [PATCH 2/2] export additional symbols to modules
+Subject: [PATCH 2/3] export additional symbols to modules
 
 ---
- kernel/sched.c  | 2 ++
- kernel/signal.c | 2 ++
- 2 files changed, 4 insertions(+)
+ kernel/posix-cpu-timers.c | 1 +
+ kernel/sched.c            | 2 ++
+ kernel/signal.c           | 2 ++
+ 3 files changed, 5 insertions(+)
 
+diff --git a/kernel/posix-cpu-timers.c b/kernel/posix-cpu-timers.c
+index 93d5e4a..39acf10 100644
+--- a/kernel/posix-cpu-timers.c
++++ b/kernel/posix-cpu-timers.c
+@@ -255,6 +255,7 @@ void thread_group_cputime(struct task_struct *tsk, struct task_cputime *times)
+ out:
+ 	rcu_read_unlock();
+ }
++EXPORT_SYMBOL_GPL(thread_group_cputime);
+ 
+ static void update_gt_cputime(struct task_cputime *a, struct task_cputime *b)
+ {
 diff --git a/kernel/sched.c b/kernel/sched.c
 index 6c8be01..f306b06 100644
 --- a/kernel/sched.c
