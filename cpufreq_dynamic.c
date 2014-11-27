@@ -134,7 +134,7 @@ static struct dbs_tuners {
 	.ignore_nice = 1,
 	.freq_step = 10,
 
-	.input_boost_freq = 0,
+	.input_boost_freq = 400000,
 	.input_boost_ms = 100,
 	.suspend_max_freq = 0,
 };
@@ -563,7 +563,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 	struct cpufreq_policy *policy;
 	unsigned int j;
-	bool boosted = ktime_to_us(ktime_get()) < (last_input_time + dbs_tuners_ins.input_boost_ms * 1000);
+	bool boosted = (dbs_tuners_ins.input_boost_freq > 0) && (ktime_to_us(ktime_get()) < (last_input_time + dbs_tuners_ins.input_boost_ms * 1000));
 
 	policy = this_dbs_info->cur_policy;
 
@@ -623,9 +623,12 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	}
 
 	if (boosted) {
-		if (policy->cur < dbs_tuners_ins.input_boost_freq) {
-			this_dbs_info->requested_freq = dbs_tuners_ins.input_boost_freq;
-			__cpufreq_driver_target(policy, dbs_tuners_ins.input_boost_freq, CPUFREQ_RELATION_H);
+		//freq_target = suspend ? (dbs_tuners_ins.suspend_max_freq ? dbs_tuners_ins.suspend_max_freq : policy->max) : dbs_tuners_ins.input_boost_freq;
+		freq_target = suspend ? policy->max : dbs_tuners_ins.input_boost_freq;
+		//freq_target = dbs_tuners_ins.input_boost_freq;
+		if (policy->cur < freq_target) {
+			this_dbs_info->requested_freq = freq_target;
+			__cpufreq_driver_target(policy, freq_target, CPUFREQ_RELATION_H);
 			return;
 		}
 	}
@@ -757,6 +760,7 @@ static void dbs_resume(struct early_suspend *handler)
 	//unsigned int cpu;
 	struct cpu_dbs_info_s *this_dbs_info = &per_cpu(cs_cpu_dbs_info, 0);
 	struct cpufreq_policy *policy = this_dbs_info->cur_policy;
+	unsigned int cpu;
 
 	suspend = false;
 	standby = false;
@@ -768,14 +772,10 @@ static void dbs_resume(struct early_suspend *handler)
 			policy,
 			policy->max, CPUFREQ_RELATION_H);
 
-	/*
 	for_each_online_cpu(cpu) {
 		this_dbs_info = &per_cpu(cs_cpu_dbs_info, cpu);
-		__cpufreq_driver_target(
-				policy,
-				policy->max, CPUFREQ_RELATION_H);
+		this_dbs_info->requested_freq = policy->max;
 	}
-	*/
 }
 
 static struct early_suspend dbs_early_suspend = {
@@ -794,9 +794,6 @@ static void hotplug_input_event(struct input_handle *handle,
 
 	standby = false;
 	delay = usecs_to_jiffies(dbs_tuners_ins.sampling_rate);
-
-	if (!dbs_tuners_ins.input_boost_freq)
-		return;
 
 	now = ktime_to_us(ktime_get());
 	if (now - last_input_time < MIN_INPUT_INTERVAL) {
