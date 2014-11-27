@@ -24,12 +24,18 @@ create table import (ts real, jiffies int, wakeup_timeout int,
 delete from import where freq=0 or jiffies < 0 or stime+utime>(jiffies+1)*10;
 
 --TODO calculate active/standby flag
+alter table import add active int default 0;
+--update import set active=1 where ts in (select distinct i.ts from import i, (select ts, (select min(cc.ts) from import cc where cc.ts>c.ts and cc.input_delta >= 100*1000 and cc.freq=100 and cc.jiffies>=3) as active_end from import c where wakeup_input=1) u where i.ts between u.ts and u.active_end);
+create temp table t1 as select ts, (select min(cc.ts) from import cc where cc.ts>c.ts and cc.input_delta >= 100*1000 and cc.freq=100 and cc.jiffies>=3) as active_end from import c where wakeup_input=1;
+create temp table t2 as select distinct i.ts from import i, t1 u where i.ts between u.ts and u.active_end;
+update import set active=1 where ts in (select ts from t2);
+update import set active=0 where active is null;
 
 drop VIEW _cpu_usage;
 CREATE VIEW _cpu_usage as select suspend, freq, cpu_load as cpu_load_time, cpu_time as cpu_total_time, cpu_time-cpu_load as cpu_idle_time, cpu_load-rtime as cpu_bg_time, 100.0*(cpu_load)/(cpu_time) as cpu_load_pct
 	,rtime as app_cpu_time, 100.0*rtime/cpu_time as app_cpu_pct, 100.0*rtime/cpu_load as app_load_pct
 	,cpu_max_load, 100.0*rtime/cpu_max_load as app_max_load_pct
-	,input_delta
+	,input_delta, active as active_mode
 	from import
 	where cpu_load > 0 and cpu_time > 0 and cpu_max_load > 0;
 
