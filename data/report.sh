@@ -69,6 +69,40 @@ do_stacked_graph \
 	"using 2 t 'app', '' using 3:xtic(1) t 'background', '' using 4 t 'idle'" \
 	"set yrange [0:120];"
 
+#active
+do_stacked_graph \
+	"time_in_freq_and_efficiency_active" \
+	"select freq, sum(app_cpu_time), sum(cpu_bg_time), sum(cpu_idle_time) from _cpu_usage where suspend=0 and active_mode=1 group by freq order by freq;"\
+	"using 2 t 'app', '' using 3:xtic(1) t 'background', '' using 4 t 'idle'"
+
+do_stacked_graph \
+	"load_in_freq_and_efficiency_active" \
+	"select freq, freq*sum(app_cpu_time), freq*sum(cpu_bg_time), freq*sum(cpu_idle_time) from _cpu_usage where suspend=0 and active_mode=1 group by freq order by freq;" \
+	"using 2 t 'app', '' using 3:xtic(1) t 'background', '' using 4 t 'idle'"
+
+do_stacked_graph \
+	"time_in_freq_and_efficiency_active_norm" \
+	"select freq, 100.0*sum(app_cpu_time)/sum(cpu_total_time), 100.0*sum(cpu_bg_time)/sum(cpu_total_time), 100.0*sum(cpu_idle_time)/sum(cpu_total_time) from _cpu_usage where suspend=0 and active_mode=1 group by freq order by freq;" \
+	"using 2 t 'app', '' using 3:xtic(1) t 'background', '' using 4 t 'idle'" \
+	"set yrange [0:120];"
+
+#standby
+do_stacked_graph \
+	"time_in_freq_and_efficiency_standby" \
+	"select freq, sum(app_cpu_time), sum(cpu_bg_time), sum(cpu_idle_time) from _cpu_usage where suspend=0 and active_mode=0 group by freq order by freq;"\
+	"using 2 t 'app', '' using 3:xtic(1) t 'background', '' using 4 t 'idle'"
+
+do_stacked_graph \
+	"load_in_freq_and_efficiency_standby" \
+	"select freq, freq*sum(app_cpu_time), freq*sum(cpu_bg_time), freq*sum(cpu_idle_time) from _cpu_usage where suspend=0 and active_mode=0 group by freq order by freq;" \
+	"using 2 t 'app', '' using 3:xtic(1) t 'background', '' using 4 t 'idle'"
+
+do_stacked_graph \
+	"time_in_freq_and_efficiency_standby_norm" \
+	"select freq, 100.0*sum(app_cpu_time)/sum(cpu_total_time), 100.0*sum(cpu_bg_time)/sum(cpu_total_time), 100.0*sum(cpu_idle_time)/sum(cpu_total_time) from _cpu_usage where suspend=0 and active_mode=0 group by freq order by freq;" \
+	"using 2 t 'app', '' using 3:xtic(1) t 'background', '' using 4 t 'idle'" \
+	"set yrange [0:120];"
+
 #background
 do_stacked_graph \
 	"time_in_freq_and_efficiency_background" \
