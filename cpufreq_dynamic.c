@@ -791,6 +791,7 @@ static void hotplug_input_event(struct input_handle *handle,
 {
 	u64 now;
 	struct cpu_dbs_info_s *dbs_info = &per_cpu(cs_cpu_dbs_info, 0);
+	//struct cpufreq_policy *policy = dbs_info->cur_policy;
 
 	standby = false;
 	delay = usecs_to_jiffies(dbs_tuners_ins.sampling_rate);
@@ -804,7 +805,9 @@ static void hotplug_input_event(struct input_handle *handle,
 
 	last_input_time = now;
 
-	flush_delayed_work(&dbs_info->work);
+	//__cpufreq_driver_target(policy, policy->max, CPUFREQ_RELATION_H);
+	//FIXME atomic context, can't schedule
+	//flush_delayed_work_sync(&dbs_info->work);
 }
 
 static int hotplug_input_connect(struct input_handler *handler,
