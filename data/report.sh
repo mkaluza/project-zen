@@ -12,10 +12,11 @@ if [ ! -f $src/db.sqlite3 ]; then
 fi
 
 function do_stacked_graph() {
-fname="$1"
+title="$1"
 sql="$2"
 plotcmd="$3"
 gpcmd="$4"
+fname=`echo $title | tr A-Z a-z | sed -e "s/ /_/g"`
 
 echo "Generating $fname"
 
@@ -28,6 +29,8 @@ set boxwidth 0.75 absolute
 set style fill solid 1.00 border -1
 set style histogram rowstacked
 set style data histograms
+set grid
+set title '$fname'
 $gpcmd
 plot '$datadir/${fname}.dat' $plotcmd " | gnuplot
 }
@@ -70,33 +73,33 @@ do_stacked_graph \
 do_stacked_graph \
 	"time_in_freq_and_efficiency_background" \
 	"select freq, sum(cpu_bg_time), sum(cpu_idle_time) from _cpu_usage where suspend=0 and app_cpu_time = 0 group by freq order by freq;"\
-	"using 2:xtic(1) t 'background', '' using 3 t 'idle'"
+	"using 2:xtic(1) t 'background' lc rgb '#00C000', '' using 3 t 'idle' lc rgb '#0080FF'" \
 
 do_stacked_graph \
 	"load_in_freq_and_efficiency_background" \
 	"select freq, freq*sum(cpu_bg_time), freq*sum(cpu_idle_time) from _cpu_usage where suspend=0 and app_cpu_time = 0  group by freq order by freq;" \
-	"using 2:xtic(1) t 'background', '' using 3 t 'idle'"
+	"using 2:xtic(1) t 'background' lc rgb '#00C000', '' using 3 t 'idle' lc rgb '#0080FF'" \
 
 do_stacked_graph \
 	"time_in_freq_and_efficiency_background_norm" \
 	"select freq, 100.0*sum(cpu_bg_time)/sum(cpu_total_time), 100.0*sum(cpu_idle_time)/sum(cpu_total_time) from _cpu_usage where suspend=0 and app_cpu_time = 0  group by freq order by freq;" \
-	"using 2:xtic(1) t 'background', '' using 3 t 'idle'" \
+	"using 2:xtic(1) t 'background' lc rgb '#00C000', '' using 3 t 'idle' lc rgb '#0080FF'" \
 	"set yrange [0:120];"
 
 #suspend
 do_stacked_graph \
 	"time_in_freq_and_efficiency_suspend" \
 	"select freq, sum(cpu_load_time), sum(cpu_idle_time) from _cpu_usage where suspend=1 group by freq order by freq;"\
-	"using 2:xtic(1) t 'active', '' using 3 t 'idle'"
+	"using 2:xtic(1) t 'active' lc rgb '#00C000', '' using 3 t 'idle' lc rgb '#0080FF'"
 
 do_stacked_graph \
 	"load_in_freq_and_efficiency_suspend" \
 	"select freq, freq*sum(cpu_load_time), freq*sum(cpu_idle_time) from _cpu_usage where suspend=1 group by freq order by freq;" \
-	"using 2:xtic(1) t 'active', '' using 3 t 'idle'"
+	"using 2:xtic(1) t 'active' lc rgb '#00C000', '' using 3 t 'idle' lc rgb '#0080FF'"
 
 do_stacked_graph \
 	"time_in_freq_and_efficiency_suspend_norm" \
 	"select freq, 100.0*sum(cpu_load_time)/sum(cpu_total_time), 100.0*sum(cpu_idle_time)/sum(cpu_total_time) from _cpu_usage where suspend=1 group by freq order by freq;" \
-	"using 2:xtic(1) t 'active', '' using 3 t 'idle'" \
+	"using 2:xtic(1) t 'active' lc rgb '#00C000', '' using 3 t 'idle' lc rgb '#0080FF'" \
 	"set yrange [0:120];"
 
