@@ -87,6 +87,14 @@ do_stacked_graph \
 	"using 2 t 'app', '' using 3:xtic(1) t 'background', '' using 4 t 'idle'" \
 	"set yrange [0:120];"
 
+do_multi_stacked_graph \
+	"nosuspend_multi" \
+	"layout 1,3 scale 1.14,1" \
+	"using 2 t 'app', '' using 3:xtic(1) t 'background', '' using 4 t 'idle'" \
+	"time_in_freq_and_efficiency_nosuspend" "Time in freq" "" \
+	"load_in_freq_and_efficiency_nosuspend" "Load in freq" "" \
+	"time_in_freq_and_efficiency_nosuspend_norm" "Time in freq norm" "set yrange [0:120];"
+
 #foreground
 do_stacked_graph \
 	"time_in_freq_and_efficiency_foreground" \
@@ -103,6 +111,14 @@ do_stacked_graph \
 	"select freq, 100.0*sum(app_cpu_time)/sum(cpu_total_time), 100.0*sum(cpu_bg_time)/sum(cpu_total_time), 100.0*sum(cpu_idle_time)/sum(cpu_total_time) from _cpu_usage where suspend=0 and app_cpu_time > 0  group by freq order by freq;" \
 	"using 2 t 'app', '' using 3:xtic(1) t 'background', '' using 4 t 'idle'" \
 	"set yrange [0:120];"
+
+do_multi_stacked_graph \
+	"foreground_multi" \
+	"layout 1,3 scale 1.14,1" \
+	"using 2 t 'app', '' using 3:xtic(1) t 'background', '' using 4 t 'idle'" \
+	"time_in_freq_and_efficiency_foreground" "Time in freq" "" \
+	"load_in_freq_and_efficiency_foreground" "Load in freq" "" \
+	"time_in_freq_and_efficiency_foreground_norm" "Time in freq norm" "set yrange [0:120];"
 
 #active
 do_stacked_graph \
@@ -121,6 +137,14 @@ do_stacked_graph \
 	"using 2 t 'app', '' using 3:xtic(1) t 'background', '' using 4 t 'idle'" \
 	"set yrange [0:120];"
 
+do_multi_stacked_graph \
+	"active_multi" \
+	"layout 1,3 scale 1.14,1" \
+	"using 2 t 'app', '' using 3:xtic(1) t 'background', '' using 4 t 'idle'" \
+	"time_in_freq_and_efficiency_active" "Time in freq" "" \
+	"load_in_freq_and_efficiency_active" "Load in freq" "" \
+	"time_in_freq_and_efficiency_active_norm" "Time in freq norm" "set yrange [0:120];"
+
 #standby
 do_stacked_graph \
 	"time_in_freq_and_efficiency_standby" \
@@ -137,6 +161,14 @@ do_stacked_graph \
 	"select freq, 100.0*sum(app_cpu_time)/sum(cpu_total_time), 100.0*sum(cpu_bg_time)/sum(cpu_total_time), 100.0*sum(cpu_idle_time)/sum(cpu_total_time) from _cpu_usage where suspend=0 and active_mode=0 group by freq order by freq;" \
 	"using 2 t 'app', '' using 3:xtic(1) t 'background', '' using 4 t 'idle'" \
 	"set yrange [0:120];"
+
+do_multi_stacked_graph \
+	"standby_multi" \
+	"layout 1,3 scale 1.14,1" \
+	"using 2 t 'app', '' using 3:xtic(1) t 'background', '' using 4 t 'idle'" \
+	"time_in_freq_and_efficiency_standby" "Time in freq" "" \
+	"load_in_freq_and_efficiency_standby" "Load in freq" "" \
+	"time_in_freq_and_efficiency_standby_norm" "Time in freq norm" "set yrange [0:120];"
 
 #background
 do_stacked_graph \
@@ -155,6 +187,14 @@ do_stacked_graph \
 	"using 2:xtic(1) t 'background' lc rgb '#00C000', '' using 3 t 'idle' lc rgb '#0080FF'" \
 	"set yrange [0:120];"
 
+do_multi_stacked_graph \
+	"background_multi" \
+	"layout 1,3 scale 1.14,1" \
+	"using 2:xtic(1) t 'active' lc rgb '#00C000', '' using 3 t 'idle' lc rgb '#0080FF'" \
+	"time_in_freq_and_efficiency_background" "Time in freq" "" \
+	"load_in_freq_and_efficiency_background" "Load in freq" "" \
+	"time_in_freq_and_efficiency_background_norm" "Time in freq norm" "set yrange [0:120];"
+
 #suspend
 do_stacked_graph \
 	"time_in_freq_and_efficiency_suspend" \
@@ -171,4 +211,12 @@ do_stacked_graph \
 	"select freq, 100.0*sum(cpu_load_time)/sum(cpu_total_time), 100.0*sum(cpu_idle_time)/sum(cpu_total_time) from _cpu_usage where suspend=1 group by freq order by freq;" \
 	"using 2:xtic(1) t 'active' lc rgb '#00C000', '' using 3 t 'idle' lc rgb '#0080FF'" \
 	"set yrange [0:120];"
+
+do_multi_stacked_graph \
+	"suspend_multi" \
+	"layout 1,3 scale 1.14,1" \
+	"using 2:xtic(1) t 'active' lc rgb '#00C000', '' using 3 t 'idle' lc rgb '#0080FF'" \
+	"time_in_freq_and_efficiency_suspend" "Time in freq" "" \
+	"load_in_freq_and_efficiency_suspend" "Load in freq" "" \
+	"time_in_freq_and_efficiency_suspend_norm" "Time in freq norm" "set yrange [0:120];"
 
