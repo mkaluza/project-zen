@@ -35,6 +35,41 @@ $gpcmd
 plot '$datadir/${fname}.dat' $plotcmd " | tee "$datadir/$fname.cmd" | gnuplot
 }
 
+function do_multi_stacked_graph() {
+fname="$1"
+mpopts="$2"
+plotcmd="$3"
+
+shift 3
+
+echo "Generating $fname"
+
+(
+echo "
+set terminal jpeg small
+set output \"$imgdir/${fname}.jpg\"
+
+set multiplot $mpopts
+set boxwidth 0.75 absolute
+set style fill solid 1.00 border -1
+set style histogram rowstacked
+set style data histograms
+set grid
+
+set xtics rotate
+#rotate by doesn't work with multiplot
+"
+
+while [ $# -gt 0 ]; do
+echo "
+$3
+set title \"$2\"
+plot '$datadir/${1}.dat' $plotcmd "
+shift 3
+done
+) | tee "$datadir/$fname.cmd" |gnuplot
+}
+
 #nosuspend
 do_stacked_graph \
 	"time_in_freq_and_efficiency_nosuspend" \
