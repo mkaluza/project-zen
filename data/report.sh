@@ -20,7 +20,7 @@ fname=`echo $title | tr A-Z a-z | sed -e "s/ /_/g"`
 
 echo "Generating $fname"
 
-echo "$sql" | sqlite3 -csv -separator ' ' -noheader $src/db.sqlite3 | awk -f ./split_lines.awk > $datadir/${fname}.dat
+echo "$sql" | tee "$datadir/$fname.sql" | sqlite3 -csv -separator ' ' -noheader $src/db.sqlite3 | awk -f ./split_lines.awk > $datadir/${fname}.dat
 
 echo "
 set terminal jpeg medium
@@ -32,7 +32,7 @@ set style data histograms
 set grid
 set title '$fname'
 $gpcmd
-plot '$datadir/${fname}.dat' $plotcmd " | gnuplot
+plot '$datadir/${fname}.dat' $plotcmd " | tee "$datadir/$fname.cmd" | gnuplot
 }
 
 #nosuspend
