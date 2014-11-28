@@ -57,6 +57,7 @@ def main(argv=None):
 
     # Fail on undefined
     env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+    env.loader = jinja2.FileSystemLoader('.')
 
     template = env.from_string(args.template.read())
 
