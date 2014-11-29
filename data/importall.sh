@@ -23,12 +23,50 @@ create table import (ts real, jiffies int, wakeup_timeout int,
 
 delete from import where freq=0 or jiffies < 0 or stime+utime>(jiffies+1)*10;
 
---TODO calculate active/standby flag
+--FIXME some errors in cpu time accounting - probably due to cpuidle
+update import set cpu_time=cpu0_active+cpu0_idle, cpu1_idle=0 where cpu1_active=0 and cpu1_idle>(jiffies+100)*10000;
+
+create index tsindex on import(ts);
+
+CREATE TABLE cpu_voltage (freq int, voltage real);
+_EOF
+
+# put cpu voltages into one of those files in freq,voltage format
+f="$1/cpu_voltage.csv";
+[ ! -f "$f" -a -f "cpu_voltage.csv" ] && cp cpu_voltage.csv $f
+
+if [ -f "$f" ]; then
+sqlite3 $1/db.sqlite3 << _EOF
+.mode csv
+.import '$f' cpu_voltage
+_EOF
+else
+sqlite3 $1/db.sqlite3 << _EOF
+insert into cpu_voltage select distinct freq, 1 from import order by 1;
+_EOF
+fi
+
+# if cpu_voltage.csv containes raw values (like register values - but have to be decimal! sqlite can't read hex:/)
+# instead of absolute voltage, put conversion commands into cpu_power.sql
+#
+# example: update cpu_voltage set voltage=0.7+0.0125*voltage;
+
+if [ -f cpu_power.sql ]; then
+	cat cpu_power.sql | sqlite3 $1/db.sqlite3
+fi
+
+INPUT_TIME_MS=50
+STANDBY_DELAY_FACTOR=2
+sqlite3 $1/db.sqlite3 << _EOF
+alter table cpu_voltage add rel_power real default 1;
+update cpu_voltage set rel_power=voltage*voltage/(select min(voltage*voltage) from cpu_voltage);
+
+--calculate active/standby flag
 alter table import add active int default 0;
---update import set active=1 where ts in (select distinct i.ts from import i, (select ts, (select min(cc.ts) from import cc where cc.ts>c.ts and cc.input_delta >= 100*1000 and cc.freq=100 and cc.jiffies>=3) as active_end from import c where wakeup_input=1) u where i.ts between u.ts and u.active_end);
-create temp table t1 as select ts, (select min(cc.ts) from import cc where cc.ts>c.ts and cc.input_delta >= 100*1000 and cc.freq=100 and cc.jiffies>=3) as active_end from import c where wakeup_input=1;
+--TODO get standby_delay_factor from gov settings
+create temp table t1 as select ts, (select min(cc.ts) from import cc where cc.ts>c.ts and cc.input_delta >= ${INPUT_TIME_MS}000 and cc.freq=100 and cc.jiffies>=$STANDBY_DELAY_FACTOR) as active_end from import c where wakeup_input=1;
 create temp table t2 as select distinct i.ts from import i, t1 u where i.ts between u.ts and u.active_end;
-update import set active=1 where ts in (select ts from t2);
+update import set active=1 where ts in (select ts from t2) and (active=0 or active is null);
 update import set active=0 where active is null;
 
 drop VIEW _cpu_usage;

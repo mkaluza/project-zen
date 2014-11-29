@@ -1,5 +1,7 @@
 Makefile.local
 data/data
+data/cpu_power.sql
+data/cpu_voltage.csv
 
 *.sqlite?
 
