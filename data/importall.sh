@@ -70,10 +70,12 @@ update import set active=1 where ts in (select ts from t2) and (active=0 or acti
 update import set active=0 where active is null;
 
 drop VIEW _cpu_usage;
-CREATE VIEW _cpu_usage as select suspend, freq, cpu_load as cpu_load_time, cpu_time as cpu_total_time, cpu_time-cpu_load as cpu_idle_time, cpu_load-rtime as cpu_bg_time, 100.0*(cpu_load)/(cpu_time) as cpu_load_pct
+CREATE VIEW _cpu_usage as select suspend, active as active_mode, rtime > 0 as foreground_mode
+	, freq
+	, cpu_load as cpu_load_time, cpu_time as cpu_total_time, cpu_time-cpu_load as cpu_idle_time, cpu_load-rtime as cpu_bg_time, 100.0*(cpu_load)/(cpu_time) as cpu_load_pct
 	,rtime as app_cpu_time, 100.0*rtime/cpu_time as app_cpu_pct, 100.0*rtime/cpu_load as app_load_pct
 	,cpu_max_load, 100.0*rtime/cpu_max_load as app_max_load_pct
-	,input_delta, active as active_mode
+	,input_delta
 	from import
 	where cpu_load > 0 and cpu_time > 0 and cpu_max_load > 0;
 
