@@ -18,6 +18,8 @@ plotcmd="$3"
 gpcmd="$4"
 fname=`echo $title | tr A-Z a-z | sed -e "s/ /_/g"`
 
+echo $fname >> $datadir/img_names.txt
+
 echo "Generating $fname"
 
 echo "$sql" | tee "$datadir/$fname.sql" | sqlite3 -csv -separator ' ' -noheader $src/db.sqlite3 | awk -f ./split_lines.awk > $datadir/${fname}.dat
@@ -41,6 +43,8 @@ mpopts="$2"
 plotcmd="$3"
 
 shift 3
+
+echo $fname >> $datadir/img_names.txt
 
 echo "Generating $fname"
 
