@@ -324,3 +324,13 @@ do_multi_stacked_graph \
 	"load_in_freq_and_efficiency_background_standby" "Load in freq" "" \
 	"time_in_freq_and_efficiency_background_standby_norm" "Time in freq norm" "set yrange [0:120];"
 
+echo '
+select suspend, sum(count) as count, sum(time) as time,
+	    sum(load) as load, sum(energy) as energy
+	        from states_distribution group by suspend;
+
+' | sqlite3 -list -separator "|" $1/db.sqlite3 | awk -f sql2table.awk > $1/data/q1.dat
+
+echo '
+select * from states_distribution_nosuspend;
+' | sqlite3 -list -separator "|" $1/db.sqlite3 | awk -f sql2table.awk > $1/data/q2.dat

@@ -95,5 +95,26 @@ create view cpu_usage_dist_cumul_norm as select suspend, freq, cpu_load_pct, 100
 
 drop view cpu_usage_dist_norm;
 create view cpu_usage_dist_norm as select suspend, freq, cpu_load_pct, 100.0*cpu_total_time/(select max(cumul_time_us) from cpu_usage_dist_cumul cc where cc.suspend=c.suspend and cc.freq=c.freq) as norm_val from cpu_usage_dist c;
+
+drop view states_statistics;
+create view states_statistics as select suspend, active_mode, foreground_mode
+	,count(*) as count, sum(cpu_total_time) as time, sum(cpu_load_time*freq) as load, sum(cpu_load_time*freq*rel_power) as energy
+	from _cpu_usage join cpu_voltage using (freq) group by suspend, active_mode, foreground_mode order by 1,2,3;
+
+drop view states_distribution;
+create view states_distribution as select suspend, active_mode, foreground_mode
+	, round(100.0*count/(select sum(count) from states_statistics),1) as count
+	, round(100.0*time/(select sum(time) from states_statistics),1) as time
+	, round(100.0*load/(select sum(load) from states_statistics),1) as load
+	, round(100.0*energy/(select sum(energy) from states_statistics),1) as energy
+	from states_statistics;
+
+drop view states_distribution_nosuspend;
+create view states_distribution_nosuspend as select active_mode, foreground_mode
+	, round(100.0*count/(select sum(count) from states_statistics where suspend=0),1) as count
+	, round(100.0*time/(select sum(time) from states_statistics where suspend=0),1) as time
+	, round(100.0*load/(select sum(load) from states_statistics where suspend=0),1) as load
+	, round(100.0*energy/(select sum(energy) from states_statistics where suspend=0),1) as energy
+	from states_statistics where suspend=0;
 _EOF
 
