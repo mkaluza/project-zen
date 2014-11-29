@@ -50,7 +50,7 @@ echo "Generating $fname"
 
 (
 echo "
-set terminal jpeg small
+set terminal jpeg small size 640,280
 set output \"$imgdir/${fname}.jpg\"
 
 set multiplot $mpopts
