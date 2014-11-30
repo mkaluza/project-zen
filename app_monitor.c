@@ -61,7 +61,8 @@ module_param_named(pending_readers_count, pending_readers_count.counter, int, 06
 
 static DECLARE_WAIT_QUEUE_HEAD (jiq_wait);
 
-static bool io_is_busy = true;
+static unsigned int io_is_busy = 1;
+module_param(io_is_busy, uint, 0644);
 
 struct cpufreq_interactive_cpuinfo {
 	struct timer_list cpu_timer;
