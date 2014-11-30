@@ -118,6 +118,7 @@ static struct dbs_tuners {
 	unsigned int down_differential;
 	unsigned int ignore_nice;
 	unsigned int freq_step;
+	unsigned int io_is_busy;
 
 	unsigned int input_boost_freq;
 	unsigned int input_boost_ms;
@@ -132,6 +133,7 @@ static struct dbs_tuners {
 	.sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR,
 
 	.ignore_nice = 1,
+	.io_is_busy = 0,
 	.freq_step = 10,
 
 	.input_boost_freq = 400000,
@@ -167,12 +169,11 @@ static inline cputime64_t get_cpu_idle_time_jiffy(unsigned int cpu,
 
 static inline cputime64_t get_cpu_idle_time(unsigned int cpu, cputime64_t *wall)
 {
-	u64 idle_time = get_cpu_idle_time_us(cpu, NULL);
+	u64 idle_time = get_cpu_idle_time_us(cpu, wall);
 
 	if (idle_time == -1ULL)
 		return get_cpu_idle_time_jiffy(cpu, wall);
-	else
-		//TODO add io_is_busy?
+	else if (!dbs_tuners_ins.io_is_busy)
 		idle_time += get_cpu_iowait_time_us(cpu, wall);
 
 	return idle_time;
@@ -252,6 +253,7 @@ show_one(sampling_down_factor, sampling_down_factor);
 show_one(up_threshold, up_threshold);
 show_one(down_differential, down_differential);
 show_one(ignore_nice_load, ignore_nice);
+show_one(io_is_busy, io_is_busy);
 show_one(freq_step, freq_step);
 
 show_one(input_boost_freq, input_boost_freq);
@@ -462,6 +464,38 @@ static ssize_t store_down_differential(struct kobject *a, struct attribute *b,
 	return count;
 }
 
+static ssize_t store_io_is_busy(struct kobject *a, struct attribute *b,
+				      const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+
+	unsigned int j;
+
+	ret = sscanf(buf, "%u", &input);
+	if (ret != 1)
+		return -EINVAL;
+
+	if (input > 1)
+		input = 1;
+
+	if (input == dbs_tuners_ins.io_is_busy) /* nothing to do */
+		return count;
+
+	dbs_tuners_ins.io_is_busy = input;
+
+	/* we need to re-evaluate prev_cpu_idle */
+	for_each_online_cpu(j) {
+		struct cpu_dbs_info_s *dbs_info;
+		dbs_info = &per_cpu(cs_cpu_dbs_info, j);
+		dbs_info->prev_cpu_idle = get_cpu_idle_time(j,
+						&dbs_info->prev_cpu_wall);
+		if (dbs_tuners_ins.ignore_nice)
+			dbs_info->prev_cpu_nice = kstat_cpu(j).cpustat.nice;
+	}
+	return count;
+}
+
 static ssize_t store_ignore_nice_load(struct kobject *a, struct attribute *b,
 				      const char *buf, size_t count)
 {
@@ -523,6 +557,7 @@ define_one_global_rw(sampling_down_factor);
 define_one_global_rw(up_threshold);
 define_one_global_rw(down_differential);
 define_one_global_rw(ignore_nice_load);
+define_one_global_rw(io_is_busy);
 define_one_global_rw(freq_step);
 
 define_one_global_rw(suspend_max_freq);
@@ -541,6 +576,7 @@ static struct attribute *dbs_attributes[] = {
 	&up_threshold.attr,
 	&down_differential.attr,
 	&ignore_nice_load.attr,
+	&io_is_busy.attr,
 	&freq_step.attr,
 	&input_boost_freq.attr,
 	&input_boost_ms.attr,
