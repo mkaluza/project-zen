@@ -7,11 +7,11 @@ mkpipe $pipe
 zcat $1/*.gz | sed -e "s/[a-z][^\ ]*.//g" > $pipe&
 
 sqlite3 $1/db.sqlite3 << _EOF
-create table import (ts real, jiffies int, wakeup_timeout int,
-	wakeup_suspend int, suspend int,
-	wakeup_freq int, freq int,
-	wakeup_input int, input_delta int, input_time int,
-	wakeup_app int, gid int, utime int, stime int, rtime int,
+create table import (ts real, jiffies int, up_timeout int,
+	up_susp int, suspend int,
+	up_freq int, freq int,
+	up_inp int, input_delta int, input_time int,
+	up_app int, gid int, utime int, stime int, rtime int,
 	cpu_load int, cpu_time int, cpu_max_load int,
 	cpu0_active int, cpu0_idle int, cpu1_active int, cpu1_idle int);
 
@@ -56,7 +56,7 @@ if [ -f cpu_power.sql ]; then
 fi
 
 INPUT_TIME_MS=50
-STANDBY_DELAY_FACTOR=2
+STANDBY_DELAY_FACTOR=3
 sqlite3 $1/db.sqlite3 << _EOF
 alter table cpu_voltage add rel_power real default 1;
 update cpu_voltage set rel_power=voltage*voltage/(select min(voltage*voltage) from cpu_voltage);
@@ -64,7 +64,7 @@ update cpu_voltage set rel_power=voltage*voltage/(select min(voltage*voltage) fr
 --calculate active/standby flag
 alter table import add active int default 0;
 --TODO get standby_delay_factor from gov settings
-create temp table t1 as select ts, (select min(cc.ts) from import cc where cc.ts>c.ts and cc.input_delta >= ${INPUT_TIME_MS}000 and cc.freq=100 and cc.jiffies>=$STANDBY_DELAY_FACTOR) as active_end from import c where wakeup_input=1;
+create temp table t1 as select ts, (select min(cc.ts) from import cc where cc.ts>c.ts and cc.input_delta >= ${INPUT_TIME_MS}000 and cc.freq=100 and cc.jiffies>=$STANDBY_DELAY_FACTOR) as active_end from import c where up_inp=1;
 create temp table t2 as select distinct i.ts from import i, t1 u where i.ts between u.ts and u.active_end;
 update import set active=1 where ts in (select ts from t2) and (active=0 or active is null);
 update import set active=0 where active is null;
