@@ -349,11 +349,14 @@ static u64 update_load(void)
 		delta_time = (unsigned int)(now - pcpu->time_in_idle_timestamp);
 
 		if (delta_time <= delta_idle)
+		{
+			//FIXME clean up this mess...
 			active_time = 0;
+			delta_idle = 0;
+		}
 		else
 			active_time = delta_time - delta_idle;
 
-		//pcpu->cputime_speedadj += active_time * pcpu->policy->cur;
 		pcpu->active_time = active_time;
 		pcpu->idle_time = delta_idle;
 		pcpu->time_in_idle = now_idle;
