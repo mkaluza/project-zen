@@ -684,8 +684,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		freq_target = 5;
 
 	/* Check for frequency increase */
-	//TODO? if (max_load > (suspend ? 99 : dbs_tuners_ins.up_threshold)) {
-	if (max_load > dbs_tuners_ins.up_threshold) {
+	if (max_load > (standby || suspend  ? 99 : dbs_tuners_ins.up_threshold)) {
 		this_dbs_info->down_skip = 0;
 
 		/* if we are already at full speed then break out early */
