@@ -596,6 +596,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	unsigned int load = 0;
 	unsigned int max_load = 0;
 	unsigned int freq_target;
+	unsigned int min_supporting_freq = 0;
 
 	struct cpufreq_policy *policy;
 	unsigned int j;
@@ -736,11 +737,21 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	/* Check for frequency decrease */
 
 	if (max_load < this_dbs_info->down_threshold && (!boosted || policy->cur > dbs_tuners_ins.input_boost_freq)) {
-		if (!suspend && !standby && ++(this_dbs_info->down_skip) < dbs_tuners_ins.sampling_down_factor)
-			return;
+		//calculate minimum freq that can support current workload (load_pct*cur_freq) with load < up_threshold+down_diff
+		min_supporting_freq = (this_dbs_info->requested_freq*max_load)/(dbs_tuners_ins.up_threshold - dbs_tuners_ins.down_differential);
+
+		if (active) {
+			if (++(this_dbs_info->down_skip) < dbs_tuners_ins.sampling_down_factor)
+				return;
+
+			this_dbs_info->requested_freq -= freq_target;
+		} else {
+			//Go directly to the lowest frequency that can support current load
+			this_dbs_info->requested_freq = min_supporting_freq;
+		}
+
 		this_dbs_info->down_skip = 0;
 
-		this_dbs_info->requested_freq -= freq_target;
 		if (this_dbs_info->requested_freq < policy->min)
 			this_dbs_info->requested_freq = policy->min;
 
