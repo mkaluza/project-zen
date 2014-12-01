@@ -600,6 +600,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	struct cpufreq_policy *policy;
 	unsigned int j;
 	bool boosted = (dbs_tuners_ins.input_boost_freq > 0) && (ktime_to_us(ktime_get()) < (last_input_time + dbs_tuners_ins.input_boost_ms * 1000));
+	bool active = !(suspend || standby);
 
 	policy = this_dbs_info->cur_policy;
 
@@ -684,7 +685,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		freq_target = 5;
 
 	/* Check for frequency increase */
-	if (max_load > (standby || suspend  ? 99 : dbs_tuners_ins.up_threshold)) {
+	if (max_load > (active ? dbs_tuners_ins.up_threshold : 99)) {
 		this_dbs_info->down_skip = 0;
 
 		/* if we are already at full speed then break out early */
@@ -719,7 +720,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	 * if we cannot reduce the frequency anymore, break out early
 	 */
 	if (policy->cur == policy->min) {
-		if (!suspend && !standby) {
+		if (active) {
 			if (++(this_dbs_info->standby_counter) >= dbs_tuners_ins.standby_delay_factor)
 				standby = true;
 
