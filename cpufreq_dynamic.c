@@ -272,83 +272,34 @@ show_one(input_boost_ms, input_boost_us/1000);
 
 show_one(suspend_max_freq, suspend_max_freq);
 
-static ssize_t store_sampling_down_factor_relax(struct kobject *a,
-					  struct attribute *b,
-					  const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
-
-	if (ret != 1)
-		return -EINVAL;
-
-	dbs_tuners_ins.sampling_down_factor_relax = input;
-	return count;
+#define __store_int(file_name, object, condition, conversion)	\
+static ssize_t store_##file_name(struct kobject *a, struct attribute *b, const char *buf, size_t count)	\
+{	\
+	unsigned int input;	\
+	int ret;	\
+	ret = sscanf(buf, "%u", &input);	\
+\
+	if (ret != 1 || (condition))	\
+		return -EINVAL;	\
+\
+	dbs_tuners_ins.object = conversion;	\
+	return count;\
 }
 
-static ssize_t store_sampling_down_factor(struct kobject *a,
-					  struct attribute *b,
-					  const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
+#define store_int_cond(file_name, object, condition) __store_int(file_name, object, condition, input);
+#define store_int(file_name, object) __store_int(file_name, object, false, input);
+#define store_bounded_int(file_name, object, lo_bound, hi_bound) __store_int(file_name, object, input < lo_bound || input > hi_bound, input);
+#define store_int_conv(file_name, object, conversion) __store_int(file_name, object, false, conversion);
 
-	if (ret != 1 || input > MAX_SAMPLING_DOWN_FACTOR || input < 1)
-		return -EINVAL;
-
-	dbs_tuners_ins.sampling_down_factor = input;
-	return count;
-}
-
-static ssize_t store_suspend_max_freq(struct kobject *a, struct attribute *b,
-				   const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
-
-	if (ret != 1)
-		return -EINVAL;
-
-	//TODO verify
-	dbs_tuners_ins.suspend_max_freq = input;
-
-	return count;
-}
-
-static ssize_t store_input_boost_freq(struct kobject *a, struct attribute *b,
-				   const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
-
-	if (ret != 1)
-		return -EINVAL;
-
-	//TODO verify
-	dbs_tuners_ins.input_boost_freq = input;
-
-	return count;
-}
-
-static ssize_t store_input_boost_ms(struct kobject *a, struct attribute *b,
-				   const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
-
-	if (ret != 1)
-		return -EINVAL;
-
-	//TODO verify
-	dbs_tuners_ins.input_boost_us = input*1000;
-
-	return count;
-}
+store_int(sampling_down_factor_relax, sampling_down_factor_relax);
+store_bounded_int(sampling_down_factor, sampling_down_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
+store_int(suspend_max_freq, suspend_max_freq);
+store_int(input_boost_freq, input_boost_freq);
+store_int_conv(input_boost_ms, input_boost_us, input*1000);
+store_bounded_int(standby_delay_factor, standby_delay_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
+store_bounded_int(standby_sampling_up_factor, standby_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
+store_bounded_int(suspend_sampling_up_factor, suspend_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
+store_bounded_int(freq_step, freq_step, 0, 100);
 
 static ssize_t store_suspend_sampling_rate(struct kobject *a, struct attribute *b,
 				   const char *buf, size_t count)
@@ -398,48 +349,6 @@ static ssize_t store_sampling_rate(struct kobject *a, struct attribute *b,
 	if (!standby && !suspend)
 		delay = dbs_tuners_ins.sampling_rate;
 
-	return count;
-}
-
-static ssize_t store_standby_delay_factor(struct kobject *a, struct attribute *b,
-				   const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
-
-	if (ret != 1 || input < 1)
-		return -EINVAL;
-
-	dbs_tuners_ins.standby_delay_factor = input;
-	return count;
-}
-
-static ssize_t store_standby_sampling_up_factor(struct kobject *a, struct attribute *b,
-				   const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
-
-	if (ret != 1 || input > MAX_SAMPLING_UP_FACTOR || input < 1)
-		return -EINVAL;
-
-	dbs_tuners_ins.standby_sampling_up_factor = input;
-	return count;
-}
-
-static ssize_t store_suspend_sampling_up_factor(struct kobject *a, struct attribute *b,
-				   const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
-
-	if (ret != 1 || input > MAX_SAMPLING_UP_FACTOR || input < 1)
-		return -EINVAL;
-
-	dbs_tuners_ins.suspend_sampling_up_factor = input;
 	return count;
 }
 
@@ -550,25 +459,6 @@ static ssize_t store_ignore_nice_load(struct kobject *a, struct attribute *b,
 		if (dbs_tuners_ins.ignore_nice)
 			dbs_info->prev_cpu_nice = kstat_cpu(j).cpustat.nice;
 	}
-	return count;
-}
-
-static ssize_t store_freq_step(struct kobject *a, struct attribute *b,
-			       const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
-
-	if (ret != 1)
-		return -EINVAL;
-
-	if (input > 100)
-		input = 100;
-
-	/* no need to test here if freq_step is zero as the user might actually
-	 * want this, they would be crazy though :) */
-	dbs_tuners_ins.freq_step = input;
 	return count;
 }
 
