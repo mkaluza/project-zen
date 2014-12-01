@@ -189,6 +189,15 @@ static inline void recalculate_down_threshold(struct cpu_dbs_info_s *this_dbs_in
 	this_dbs_info->down_threshold = temp;
 }
 
+static inline void recalculate_down_threshold_all(void)
+{
+	unsigned int cpu;
+
+	for_each_online_cpu(cpu) {
+		recalculate_down_threshold(&per_cpu(cs_cpu_dbs_info, cpu));
+	}
+}
+
 /* keep track of frequency transitions */
 static int
 dbs_cpufreq_notifier(struct notifier_block *nb, unsigned long val,
@@ -272,7 +281,7 @@ show_one(input_boost_ms, input_boost_us/1000);
 
 show_one(suspend_max_freq, suspend_max_freq);
 
-#define __store_int(file_name, object, condition, conversion)	\
+#define __store_int(file_name, object, condition, conversion, pproc)	\
 static ssize_t store_##file_name(struct kobject *a, struct attribute *b, const char *buf, size_t count)	\
 {	\
 	unsigned int input;	\
@@ -283,13 +292,14 @@ static ssize_t store_##file_name(struct kobject *a, struct attribute *b, const c
 		return -EINVAL;	\
 \
 	dbs_tuners_ins.object = conversion;	\
+	pproc;	\
 	return count;\
 }
 
-#define store_int_cond(file_name, object, condition) __store_int(file_name, object, condition, input);
-#define store_int(file_name, object) __store_int(file_name, object, false, input);
-#define store_bounded_int(file_name, object, lo_bound, hi_bound) __store_int(file_name, object, input < lo_bound || input > hi_bound, input);
-#define store_int_conv(file_name, object, conversion) __store_int(file_name, object, false, conversion);
+#define store_int_cond(file_name, object, condition) __store_int(file_name, object, condition, input, if(0) {};);
+#define store_int(file_name, object) __store_int(file_name, object, false, input, if (0){};);
+#define store_bounded_int(file_name, object, lo_bound, hi_bound) __store_int(file_name, object, input < lo_bound || input > hi_bound, input, if (0){ };);
+#define store_int_conv(file_name, object, conversion) __store_int(file_name, object, false, conversion, if(0){ };);
 
 store_int(sampling_down_factor_relax, sampling_down_factor_relax);
 store_bounded_int(sampling_down_factor, sampling_down_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
@@ -301,102 +311,35 @@ store_bounded_int(standby_sampling_up_factor, standby_sampling_up_factor, 1, MAX
 store_bounded_int(suspend_sampling_up_factor, suspend_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 store_bounded_int(freq_step, freq_step, 0, 100);
 
-static ssize_t store_suspend_sampling_rate(struct kobject *a, struct attribute *b,
-				   const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
+__store_int(suspend_sampling_rate, suspend_sampling_rate,
+		input < min_sampling_rate,
+		usecs_to_jiffies(max(input, min_sampling_rate)),
+		if (suspend) delay = dbs_tuners_ins.suspend_sampling_rate
+		);
 
-	if (ret != 1)
-		return -EINVAL;
+__store_int(standby_sampling_rate, standby_sampling_rate,
+		input < min_sampling_rate,
+		usecs_to_jiffies(max(input, min_sampling_rate)),
+		if (standby) delay = dbs_tuners_ins.standby_sampling_rate
+		);
 
-	dbs_tuners_ins.suspend_sampling_rate = usecs_to_jiffies(max(input, min_sampling_rate));
-	if (suspend)
-		delay = dbs_tuners_ins.suspend_sampling_rate;
+__store_int(sampling_rate, sampling_rate,
+		input < min_sampling_rate,
+		usecs_to_jiffies(max(input, min_sampling_rate)),
+		if (!(standby || suspend)) delay = dbs_tuners_ins.sampling_rate
+		);
 
-	return count;
-}
+__store_int(up_threshold, up_threshold,
+		input > 100 || input <= dbs_tuners_ins.down_differential,
+		input,
+		recalculate_down_threshold_all()
+		);
 
-static ssize_t store_standby_sampling_rate(struct kobject *a, struct attribute *b,
-				   const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
-
-	if (ret != 1)
-		return -EINVAL;
-
-	dbs_tuners_ins.standby_sampling_rate = usecs_to_jiffies(max(input, min_sampling_rate));
-	if (standby)
-		delay = dbs_tuners_ins.standby_sampling_rate;
-
-	return count;
-}
-
-static ssize_t store_sampling_rate(struct kobject *a, struct attribute *b,
-				   const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
-
-	if (ret != 1)
-		return -EINVAL;
-
-	dbs_tuners_ins.sampling_rate = usecs_to_jiffies(max(input, min_sampling_rate));
-	if (!standby && !suspend)
-		delay = dbs_tuners_ins.sampling_rate;
-
-	return count;
-}
-
-static ssize_t store_up_threshold(struct kobject *a, struct attribute *b,
-				  const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-	//struct cpu_dbs_info_s *this_dbs_info;
-	unsigned int cpu;
-
-	ret = sscanf(buf, "%u", &input);
-
-	if (ret != 1 || input > 100 ||
-			input <= dbs_tuners_ins.down_differential)
-		return -EINVAL;
-
-	dbs_tuners_ins.up_threshold = input;
-	for_each_online_cpu(cpu) {
-		//this_dbs_info = &per_cpu(cs_cpu_dbs_info, cpu);
-		//recalculate_down_threshold(this_dbs_info);
-		recalculate_down_threshold(&per_cpu(cs_cpu_dbs_info, cpu));
-	}
-	return count;
-}
-
-static ssize_t store_down_differential(struct kobject *a, struct attribute *b,
-				    const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-	unsigned int cpu;
-
-	ret = sscanf(buf, "%u", &input);
-
-	//setting it lower that 10 will probably cause jitter anyway...
-	if (ret != 1 || input < 10 || input > 100 ||
-			input >= dbs_tuners_ins.up_threshold)
-		return -EINVAL;
-
-	dbs_tuners_ins.down_differential = input;
-	for_each_online_cpu(cpu) {
-		//this_dbs_info = &per_cpu(cs_cpu_dbs_info, cpu);
-		//recalculate_down_threshold(this_dbs_info);
-		recalculate_down_threshold(&per_cpu(cs_cpu_dbs_info, cpu));
-	}
-	return count;
-}
+__store_int(down_differential, down_differential,
+		input > 100 || input <= dbs_tuners_ins.up_threshold,
+		input,
+		recalculate_down_threshold_all()
+		);
 
 static ssize_t store_io_is_busy(struct kobject *a, struct attribute *b,
 				      const char *buf, size_t count)
