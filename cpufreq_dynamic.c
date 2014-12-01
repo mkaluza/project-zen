@@ -114,6 +114,7 @@ static struct dbs_tuners {
 	unsigned int standby_sampling_up_factor;
 	unsigned int standby_delay_factor;
 	unsigned int sampling_down_factor;
+	unsigned int sampling_down_factor_relax;
 	unsigned int up_threshold;
 	unsigned int down_differential;
 	unsigned int ignore_nice;
@@ -131,6 +132,7 @@ static struct dbs_tuners {
 	.standby_sampling_up_factor = 2,
 	.standby_delay_factor = 3,
 	.sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR,
+	.sampling_down_factor_relax = 0,
 
 	.ignore_nice = 1,
 	.io_is_busy = 0,
@@ -250,6 +252,7 @@ show_one(suspend_sampling_up_factor, suspend_sampling_up_factor);
 show_one(standby_sampling_up_factor, standby_sampling_up_factor);
 show_one(standby_delay_factor, standby_delay_factor);
 show_one(sampling_down_factor, sampling_down_factor);
+show_one(sampling_down_factor_relax, sampling_down_factor_relax);
 show_one(up_threshold, up_threshold);
 show_one(down_differential, down_differential);
 show_one(ignore_nice_load, ignore_nice);
@@ -260,6 +263,21 @@ show_one(input_boost_freq, input_boost_freq);
 show_one(input_boost_ms, input_boost_ms);
 
 show_one(suspend_max_freq, suspend_max_freq);
+
+static ssize_t store_sampling_down_factor_relax(struct kobject *a,
+					  struct attribute *b,
+					  const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+
+	if (ret != 1)
+		return -EINVAL;
+
+	dbs_tuners_ins.sampling_down_factor_relax = input;
+	return count;
+}
 
 static ssize_t store_sampling_down_factor(struct kobject *a,
 					  struct attribute *b,
@@ -554,6 +572,7 @@ define_one_global_rw(suspend_sampling_up_factor);
 define_one_global_rw(standby_sampling_up_factor);
 define_one_global_rw(standby_delay_factor);
 define_one_global_rw(sampling_down_factor);
+define_one_global_rw(sampling_down_factor_relax);
 define_one_global_rw(up_threshold);
 define_one_global_rw(down_differential);
 define_one_global_rw(ignore_nice_load);
@@ -568,6 +587,7 @@ static struct attribute *dbs_attributes[] = {
 	&sampling_rate_min.attr,
 	&sampling_rate.attr,
 	&sampling_down_factor.attr,
+	&sampling_down_factor_relax.attr,
 	&standby_sampling_rate.attr,
 	&standby_sampling_up_factor.attr,
 	&standby_delay_factor.attr,
@@ -741,9 +761,16 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		min_supporting_freq = (this_dbs_info->requested_freq*max_load)/(dbs_tuners_ins.up_threshold - dbs_tuners_ins.down_differential);
 
 		if (active) {
-			if (++(this_dbs_info->down_skip) < dbs_tuners_ins.sampling_down_factor)
-				return;
-
+			if (++(this_dbs_info->down_skip) < dbs_tuners_ins.sampling_down_factor) {
+				//if the frequency that can support current load
+				//is at least sampling_down_factor_relax*freq_target
+				//smaller than current freq then try decreasing freq by one step
+				//despite sampling_down_factor timer ticks haven't passed yet
+				if (!dbs_tuners_ins.sampling_down_factor_relax)
+					return;
+				if (min_supporting_freq > this_dbs_info->requested_freq - freq_target * dbs_tuners_ins.sampling_down_factor_relax)
+					return;
+			}
 			this_dbs_info->requested_freq -= freq_target;
 		} else {
 			//Go directly to the lowest frequency that can support current load
