@@ -47,6 +47,7 @@
  */
 #define MIN_SAMPLING_RATE_RATIO			(2)
 
+// min_sampling_rate is in usecs, all other rates are in jiffies
 static unsigned int min_sampling_rate;
 
 #define LATENCY_MULTIPLIER			(1000)
@@ -107,7 +108,6 @@ static DEFINE_MUTEX(dbs_mutex);
 
 static struct dbs_tuners {
 	unsigned int sampling_rate;
-	unsigned int _sampling_rate;
 	unsigned int standby_sampling_rate;
 	unsigned int suspend_sampling_rate;
 	unsigned int suspend_sampling_up_factor;
@@ -122,7 +122,7 @@ static struct dbs_tuners {
 	unsigned int io_is_busy;
 
 	unsigned int input_boost_freq;
-	unsigned int input_boost_ms;
+	unsigned int input_boost_us;
 	unsigned int suspend_max_freq;
 
 } dbs_tuners_ins = {
@@ -139,7 +139,7 @@ static struct dbs_tuners {
 	.freq_step = 10,
 
 	.input_boost_freq = 400000,
-	.input_boost_ms = 100,
+	.input_boost_us = 100*1000,
 	.suspend_max_freq = 0,
 };
 
@@ -245,9 +245,17 @@ static ssize_t show_##file_name						\
 {									\
 	return sprintf(buf, "%u\n", dbs_tuners_ins.object);		\
 }
-show_one(sampling_rate, sampling_rate);
-show_one(suspend_sampling_rate, suspend_sampling_rate);
-show_one(standby_sampling_rate, standby_sampling_rate);
+
+#define show_rate(file_name, object)					\
+static ssize_t show_##file_name						\
+(struct kobject *kobj, struct attribute *attr, char *buf)		\
+{									\
+	return sprintf(buf, "%u\n", jiffies_to_usecs(dbs_tuners_ins.object));		\
+}
+
+show_rate(sampling_rate, sampling_rate);
+show_rate(suspend_sampling_rate, suspend_sampling_rate);
+show_rate(standby_sampling_rate, standby_sampling_rate);
 show_one(suspend_sampling_up_factor, suspend_sampling_up_factor);
 show_one(standby_sampling_up_factor, standby_sampling_up_factor);
 show_one(standby_delay_factor, standby_delay_factor);
@@ -260,7 +268,7 @@ show_one(io_is_busy, io_is_busy);
 show_one(freq_step, freq_step);
 
 show_one(input_boost_freq, input_boost_freq);
-show_one(input_boost_ms, input_boost_ms);
+show_one(input_boost_ms, input_boost_us/1000);
 
 show_one(suspend_max_freq, suspend_max_freq);
 
@@ -337,7 +345,7 @@ static ssize_t store_input_boost_ms(struct kobject *a, struct attribute *b,
 		return -EINVAL;
 
 	//TODO verify
-	dbs_tuners_ins.input_boost_ms = input;
+	dbs_tuners_ins.input_boost_us = input*1000;
 
 	return count;
 }
@@ -352,9 +360,9 @@ static ssize_t store_suspend_sampling_rate(struct kobject *a, struct attribute *
 	if (ret != 1)
 		return -EINVAL;
 
-	dbs_tuners_ins.suspend_sampling_rate = max(input, min_sampling_rate);
+	dbs_tuners_ins.suspend_sampling_rate = usecs_to_jiffies(max(input, min_sampling_rate));
 	if (suspend)
-		delay = usecs_to_jiffies(dbs_tuners_ins.suspend_sampling_rate);
+		delay = dbs_tuners_ins.suspend_sampling_rate;
 
 	return count;
 }
@@ -369,9 +377,9 @@ static ssize_t store_standby_sampling_rate(struct kobject *a, struct attribute *
 	if (ret != 1)
 		return -EINVAL;
 
-	dbs_tuners_ins.standby_sampling_rate = max(input, min_sampling_rate);
+	dbs_tuners_ins.standby_sampling_rate = usecs_to_jiffies(max(input, min_sampling_rate));
 	if (standby)
-		delay = usecs_to_jiffies(dbs_tuners_ins.standby_sampling_rate);
+		delay = dbs_tuners_ins.standby_sampling_rate;
 
 	return count;
 }
@@ -386,10 +394,9 @@ static ssize_t store_sampling_rate(struct kobject *a, struct attribute *b,
 	if (ret != 1)
 		return -EINVAL;
 
-	dbs_tuners_ins.sampling_rate = max(input, min_sampling_rate);
-	dbs_tuners_ins._sampling_rate = usecs_to_jiffies(dbs_tuners_ins.sampling_rate);
+	dbs_tuners_ins.sampling_rate = usecs_to_jiffies(max(input, min_sampling_rate));
 	if (!standby && !suspend)
-		delay = dbs_tuners_ins._sampling_rate;
+		delay = dbs_tuners_ins.sampling_rate;
 
 	return count;
 }
@@ -620,7 +627,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 	struct cpufreq_policy *policy;
 	unsigned int j;
-	bool boosted = (dbs_tuners_ins.input_boost_freq > 0) && (ktime_to_us(ktime_get()) < (last_input_time + dbs_tuners_ins.input_boost_ms * 1000));
+	bool boosted = (dbs_tuners_ins.input_boost_freq > 0) && (ktime_to_us(ktime_get()) < (last_input_time + dbs_tuners_ins.input_boost_us));
 	bool active = !(suspend || standby);
 
 	policy = this_dbs_info->cur_policy;
@@ -722,7 +729,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 			if (++(this_dbs_info->sampling_up_counter) < dbs_tuners_ins.standby_sampling_up_factor)
 				return;
 		} else 
-			delay = dbs_tuners_ins._sampling_rate;
+			delay = dbs_tuners_ins.sampling_rate;
 
 		this_dbs_info->sampling_up_counter = 0;
 
@@ -745,7 +752,8 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 			if (++(this_dbs_info->standby_counter) >= dbs_tuners_ins.standby_delay_factor)
 				standby = true;
 
-			delay = usecs_to_jiffies(dbs_tuners_ins.standby_sampling_rate);
+			//TODO move all state management code to functions and just call go_active, go_suspend etc...
+			delay = dbs_tuners_ins.standby_sampling_rate;
 		}
 		return;
 	}
@@ -806,7 +814,7 @@ static void do_dbs_timer(struct work_struct *work)
 
 static inline void dbs_timer_init(struct cpu_dbs_info_s *dbs_info)
 {
-	delay = dbs_tuners_ins._sampling_rate = usecs_to_jiffies(dbs_tuners_ins.sampling_rate);
+	delay = dbs_tuners_ins.sampling_rate;
 
 	dbs_info->enable = 1;
 	dbs_info->down_skip = 0;
@@ -826,7 +834,7 @@ static inline void dbs_timer_exit(struct cpu_dbs_info_s *dbs_info)
 static void dbs_suspend(struct early_suspend *handler)
 {
 	suspend = true;
-	delay = usecs_to_jiffies(dbs_tuners_ins.suspend_sampling_rate);
+	delay = dbs_tuners_ins.suspend_sampling_rate;
 }
 
 static void dbs_resume(struct early_suspend *handler)
@@ -838,7 +846,7 @@ static void dbs_resume(struct early_suspend *handler)
 
 	suspend = false;
 	standby = false;
-	delay = usecs_to_jiffies(dbs_tuners_ins.sampling_rate);
+	delay = dbs_tuners_ins.sampling_rate;
 
 	//set max freq
 	//FIXME doesn't work when suspend_max_freq is set, which doesn't make sense...
@@ -868,10 +876,10 @@ static void hotplug_input_event(struct input_handle *handle,
 	//struct cpufreq_policy *policy = dbs_info->cur_policy;
 
 	standby = false;
-	delay = usecs_to_jiffies(dbs_tuners_ins.sampling_rate);
+	delay = dbs_tuners_ins.sampling_rate;
 
 	now = ktime_to_us(ktime_get());
-	if (now - last_input_time < MIN_INPUT_INTERVAL) {
+	if (now - last_input_time < dbs_tuners_ins.input_boost_us) {
 		//if input events occur, keep the boost running, just don't flush delayed work
 		last_input_time = now;
 		return;
@@ -1015,9 +1023,8 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 			min_sampling_rate = max(min_sampling_rate,
 					MIN_LATENCY_MULTIPLIER * latency);
 			dbs_tuners_ins.sampling_rate =
-				max(min_sampling_rate,
-				    latency * LATENCY_MULTIPLIER);
-			dbs_tuners_ins._sampling_rate = usecs_to_jiffies(dbs_tuners_ins.sampling_rate);
+				usecs_to_jiffies(max(min_sampling_rate,
+				    latency * LATENCY_MULTIPLIER));
 			dbs_tuners_ins.standby_sampling_rate = 2*dbs_tuners_ins.sampling_rate;
 			dbs_tuners_ins.suspend_sampling_rate = dbs_tuners_ins.sampling_rate;
 
