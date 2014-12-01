@@ -785,14 +785,11 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 			this_dbs_info->requested_freq = min_supporting_freq;
 		}
 
-		this_dbs_info->down_skip = 0;
-
 		if (this_dbs_info->requested_freq < policy->min)
 			this_dbs_info->requested_freq = policy->min;
 
 		__cpufreq_driver_target(policy, this_dbs_info->requested_freq,
 				CPUFREQ_RELATION_L);
-		return;
 	}
 	this_dbs_info->down_skip = 0;
 }
