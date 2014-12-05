@@ -171,7 +171,7 @@ cputime_t utime_end, stime_end, cutime_end, cstime_end;
 
 static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, void *t)
 {
-	struct task_struct *task = (struct task_struct *)t;
+	struct task_struct *task = (struct task_struct *)t, *thread;
 	struct task_struct *oldtask;
 	struct fg_pid_struct *el;
 	struct signal_struct *sig;
@@ -240,7 +240,11 @@ static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, v
 			goto notfound;
 		}
 
-		set_user_nice(oldtask, 0);
+		thread = oldtask;
+		do {
+			set_user_nice(thread, 0);
+		} while_each_thread(oldtask, thread);
+
 		printk(KERN_ERR "app_monitor: oldtask\n");
 		sig = oldtask->signal;
 		cutime_end = sig->cutime;
@@ -264,7 +268,11 @@ notfound:
 
 		fg_pid_nr = task->pid;
 		fg_pid = el->pid;
-		set_user_nice(task, -10);	//TODO loop over threads
+
+		thread = task;
+		do {
+			set_user_nice(thread, -10);
+		} while_each_thread(task, thread);
 	}
 	return NOTIFY_DONE;
 }
