@@ -23,7 +23,7 @@ create table import (ts real, jiffies int, up_timeout int,
 --delete invalid entries
 --FIXME stime+utime is an error in app time accounting
 
-delete from import where freq=0 or jiffies < 0 or stime+utime>(jiffies+1)*10;
+delete from import where freq=0 or jiffies < 0 or stime+utime>(jiffies+1)*10 or rtime>18446744073709;
 
 --FIXME some errors in cpu time accounting - probably due to cpuidle
 update import set cpu_time=cpu0_active+cpu0_idle, cpu1_idle=0 where cpu1_active=0 and cpu1_idle>(jiffies+100)*10000;
@@ -84,8 +84,10 @@ CREATE VIEW _cpu_usage as select suspend, active as active_mode, rtime > 0 as fo
 	where cpu_load > 0 and cpu_time > 0 and cpu_max_load > 0;
 
 drop VIEW _cpu_usage_dist;
-CREATE VIEW _cpu_usage_dist as select suspend, freq, round(cpu_load_pct) as cpu_load_pct, sum(cpu_total_time) as cpu_total_time
-	from _cpu_usage group by suspend, freq, round(cpu_load_pct);
+CREATE VIEW _cpu_usage_dist as select suspend, freq, round(cpu_load_pct) as cpu_load_pct, round(app_load_pct) as app_load_pct,
+	sum(cpu_total_time) as cpu_total_time
+	from _cpu_usage group by suspend, freq, round(cpu_load_pct), round(app_load_pct);
+
 drop table cpu_usage_dist;
 create table cpu_usage_dist as select * from _cpu_usage_dist;
 
