@@ -6,33 +6,38 @@ pidfile=/data/local/tmp/app_monitor.pid
 
 if [ -f $pidfile ]; then
 	pid=`cat $pidfile`
-	if [ ! -d /proc/$pid ]; then
+	if [ -d /proc/$pid -a "`cat /proc/$pid/comm 2>/dev/null`" == "`basename $0`" ]; then
+		echo "Running with pid $pid"
+	else
 		echo "stale pid ($pid) found, removing"
 		rm $pidfile
 		pid=""
 	fi
-else 
-	pid=""
 fi
 
-if [ "$1" == "stop" ]; then
+function stop()  {
 	rm $pidfile
 	[ -n "$pid" ] && kill `ps | grep " $pid " | awk '{print $2}' | sort -r`
+}
+
+if [ "$1" == "stop" ]; then
+	stop
 	exit
 elif [ "$1" == "restart" ]; then
-	rm $pidfile
-	[ -n "$pid" ] && kill `ps | grep " $pid " | awk '{print $2}' | sort -r`
+	stop
 	sleep 1
 fi
 
 if [ -f $pidfile ]; then
-	if [ -d /proc/$pid ]; then
+	pid=`cat $pidfile`
+	if [ -d /proc/$pid -a "`cat /proc/$pid/comm`" == "`basename $0`" ]; then
 		echo "script already running with pid $pid"
 		exit 1;
 	else
 		echo "stale pid ($pid) found, removing"
 		rm $pidfile
 	fi
+	pid=""
 fi
 
 renice 19 $$
