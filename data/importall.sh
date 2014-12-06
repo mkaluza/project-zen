@@ -7,6 +7,8 @@ mkpipe $pipe
 zcat $1/*.gz | sed -e "s/[a-z][^\ ]*.//g" > $pipe&
 
 sqlite3 $1/db.sqlite3 << _EOF
+pragma journal_mode=memory;
+pragma synchronous=OFF;
 create table import (ts real, jiffies int, up_timeout int,
 	up_susp int, suspend int,
 	up_freq int, freq int,
@@ -58,6 +60,8 @@ fi
 INPUT_TIME_MS=50
 STANDBY_DELAY_FACTOR=3
 sqlite3 $1/db.sqlite3 << _EOF
+pragma journal_mode=memory;
+pragma synchronous=OFF;
 alter table cpu_voltage add rel_power real default 1;
 update cpu_voltage set rel_power=voltage*voltage/(select min(voltage*voltage) from cpu_voltage);
 
