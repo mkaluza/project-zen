@@ -376,9 +376,6 @@ static u64 update_load(void)
 	}
 	if (old_task != NULL) {
 		thread_group_cputime(old_task, &app_time);
-	} else {
-		app_time.utime = app_time.stime = 0;
-		app_time.sum_exec_runtime = 0;
 	}
 	return now;
 }
@@ -389,11 +386,18 @@ static bool printing_done(void) {
 		old_suspend = suspend;
 		old_freq = freq;
 		old_last_input_time = last_input_time;
-		prev_app_time = app_time;
 		if (old_task != fg_task) {
 			if (old_task) put_task_struct(old_task);
-			if (fg_task) get_task_struct(fg_task);
+			if (fg_task) {
+				get_task_struct(fg_task);
+				thread_group_cputime(fg_task, &prev_app_time);
+			} else {
+				prev_app_time.utime = prev_app_time.stime = 0;
+				prev_app_time.sum_exec_runtime = 0;
+			}
 			old_task = fg_task;
+		} else {
+			prev_app_time = app_time;
 		}
 	}
 	return !atomic_dec_and_test(&pending_readers_count);
