@@ -1,0 +1,81 @@
+<html>
+<head>
+<style>
+#marker {
+	position: relative;
+	width: 50px;
+	height:50px;
+}
+button {
+	min-height:30px;
+}
+
+#controls > button {
+	min-width: 40px;
+}
+</style>
+</head>
+<BODY>
+	<div id=marker></div>
+	<button id=starter onclick="timeIt();">Press me</button>
+	<br>
+	<div id=controls>
+		<button onclick="rate(-1);">-1</button>
+		<button onclick="rate(0);">0</button>
+		<button onclick="rate(1);">1</button>
+	</div>
+	<div id=sstatus>
+	</div>
+	<hr>
+	<div id=output>
+	</div>
+	<script type="text/javascript">
+		var timeout, tmax=1000, tmin=0;
+		var results=[[],[],[]];
+		var starter=document.getElementById("starter");
+		var sstatus=document.getElementById("sstatus");
+		var output=document.getElementById("output");
+		var controls=document.getElementById("controls");
+		var marker=document.getElementById("marker");
+		var tstart, dt;
+		function disableControls(state) {
+			var buttons=controls.getElementsByTagName("BUTTON");
+			for(var i=0; i<buttons.length; i++)
+				buttons[i].disabled=state;
+
+		}
+		function timeIt() {
+			timeout=Math.round(Math.random()*(tmax-tmin)+tmin);
+			setTimeout(onTimer, timeout);
+			tstart=new Date();
+			starter.disabled=true;
+		}
+		function onTimer() {
+			dt=(new Date()).getTime()-tstart.getTime();
+			marker.style.backgroundColor="green";
+			disableControls(false);
+		}
+		function rate(value) {
+			disableControls(true);
+			starter.disabled=false;
+			marker.style.backgroundColor="white";
+			switch (value) {
+				case -1:
+					tmax -= Math.round((tmax-timeout)*.05);
+					break;
+				case 1: 
+					tmin += Math.round((timeout-tmin)*.05);
+					break;
+			}
+			var res = results[1-value];
+			res.push(dt);
+			res.sort(function(a, b){return a-b});
+			sstatus.innerHTML="tmin: "+tmin+", tmax: "+tmax;
+			for(i in results) 
+				sstatus.innerHTML+="<br>"+results[i];
+			//output.innerHTML=dt+"("+timeout+")"+": "+value+"</br>"+output.innerHTML;
+			output.innerHTML=dt+": "+value+"</br>"+output.innerHTML;
+		}
+		disableControls(true);
+	</script>
+</BODY>
