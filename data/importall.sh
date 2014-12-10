@@ -84,9 +84,9 @@ CREATE VIEW _cpu_usage as select suspend, active as active_mode, rtime > 0 as fo
 	where cpu_load > 0 and cpu_time > 0 and cpu_max_load > 0;
 
 drop VIEW _cpu_usage_dist;
-CREATE VIEW _cpu_usage_dist as select suspend, freq, round(cpu_load_pct) as cpu_load_pct, round(app_load_pct) as app_load_pct,
+CREATE VIEW _cpu_usage_dist as select suspend, active_mode as active, freq, round(cpu_load_pct) as cpu_load_pct, round(app_load_pct) as app_load_pct,
 	sum(cpu_total_time) as cpu_total_time
-	from _cpu_usage group by suspend, freq, round(cpu_load_pct), round(app_load_pct);
+	from _cpu_usage group by suspend, freq, active_mode, round(cpu_load_pct), round(app_load_pct);
 
 drop table cpu_usage_dist;
 create table cpu_usage_dist as select * from _cpu_usage_dist;
