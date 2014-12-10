@@ -178,7 +178,6 @@ static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, v
 	cputime_t ut, st;
 
 	//TODO lock
-	//TODO check if threads parent is zygote
 	if (
 		(oom_adj != 0 && task->pid != fg_pid_nr) ||	//oom_adj of non-fg app changed to non-zero
 		(oom_adj == 0 && task->pid == fg_pid_nr)	//oom_adj of fg app set to zero once again
@@ -207,7 +206,6 @@ static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, v
 		fg_task = NULL;
 		wake_up(&jiq_wait);
 		printk(KERN_ERR "app_monitor: foreground app list empty");
-		//TODO trigger boost?
 		return NOTIFY_DONE;
 	}
 
@@ -223,12 +221,10 @@ static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, v
 		fg_pid_nr = 0;
 		fg_pid = NULL;
 		printk(KERN_ERR "app_monitor: foreground app unknown");
-		//TODO trigger boost?
 	} else if (task->pid != fg_pid_nr) {
 		printk(KERN_ERR "app_monitor: foreground app changed to %s [pid %d, tgid %d], nice %d, prio %d, is group leader: %d", task->comm, (int)task->pid, (int)task->tgid, task_nice(task), task_prio(task), thread_group_leader(task));
 		printk(KERN_ERR "app_monitor: foreground app thread group leader: %s [pid %d, tgid %d], nice %d, prio %d", task->group_leader->comm, (int)task->group_leader->pid, (int)task->group_leader->tgid, task_nice(task->group_leader), task_prio(task->group_leader));
 		
-		//TODO trigger boost
 		if (!fg_pid) {
 			printk(KERN_ERR "app_monitor: old task not set - can't calculate cputime used\n");
 			goto notfound;
