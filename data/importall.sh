@@ -3,7 +3,7 @@
 set -x
 
 pipe=`mktemp -u`
-mkpipe $pipe
+mkfifo $pipe
 zcat $1/*.gz | sed -e "s/[a-z][^\ ]*.//g" > $pipe&
 
 sqlite3 $1/db.sqlite3 << _EOF
