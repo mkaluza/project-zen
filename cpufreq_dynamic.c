@@ -129,11 +129,11 @@ static struct dbs_tuners {
 } dbs_tuners_ins = {
 	.up_threshold = DEF_FREQUENCY_UP_THRESHOLD,
 	.down_differential = DEF_DOWN_DIFFERENTIAL,
-	.suspend_sampling_up_factor = DEF_SAMPLING_UP_FACTOR,
-	.standby_sampling_up_factor = 2,
-	.standby_delay_factor = 3,
-	.sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR,
-	.sampling_down_factor_relax = 0,
+	.suspend_sampling_up_factor = 7,
+	.standby_sampling_up_factor = 3,
+	.standby_delay_factor = 1,
+	.sampling_down_factor = 2,
+	.sampling_down_factor_relax = 6,
 
 	.ignore_nice = 1,
 	.io_is_busy = 15,
@@ -871,7 +871,7 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 			dbs_tuners_ins.sampling_rate =
 				usecs_to_jiffies(max(min_sampling_rate,
 				    latency * LATENCY_MULTIPLIER));
-			dbs_tuners_ins.standby_sampling_rate = 2*dbs_tuners_ins.sampling_rate;
+			dbs_tuners_ins.standby_sampling_rate = dbs_tuners_ins.sampling_rate;
 			dbs_tuners_ins.suspend_sampling_rate = dbs_tuners_ins.sampling_rate;
 
 			cpufreq_register_notifier(
