@@ -136,7 +136,7 @@ static struct dbs_tuners {
 
 	.ignore_nice = 1,
 	.io_is_busy = 0,
-	.freq_step = 10,
+	.freq_step = 10*128/100,
 
 	.input_boost_freq = 400000,
 	.input_boost_us = 100*1000,
@@ -255,12 +255,16 @@ static ssize_t show_##file_name						\
 	return sprintf(buf, "%u\n", dbs_tuners_ins.object);		\
 }
 
-#define show_rate(file_name, object)					\
+#define show_one_conv(file_name, object, conv)				\
 static ssize_t show_##file_name						\
 (struct kobject *kobj, struct attribute *attr, char *buf)		\
 {									\
-	return sprintf(buf, "%u\n", jiffies_to_usecs(dbs_tuners_ins.object));		\
+	unsigned int value = dbs_tuners_ins.object;			\
+	return sprintf(buf, "%u\n", conv);				\
 }
+
+#define show_rate(file_name, object)					\
+show_one_conv(file_name, object, jiffies_to_usecs(value));
 
 show_rate(sampling_rate, sampling_rate);
 show_rate(suspend_sampling_rate, suspend_sampling_rate);
@@ -274,7 +278,7 @@ show_one(up_threshold, up_threshold);
 show_one(down_differential, down_differential);
 show_one(ignore_nice_load, ignore_nice);
 show_one(io_is_busy, io_is_busy);
-show_one(freq_step, freq_step);
+show_one_conv(freq_step, freq_step, (value+1)*100/128);
 
 show_one(input_boost_freq, input_boost_freq);
 show_one(input_boost_ms, input_boost_us/1000);
@@ -300,6 +304,7 @@ static ssize_t store_##file_name(struct kobject *a, struct attribute *b, const c
 #define store_int(file_name, object) __store_int(file_name, object, false, input, if (0){};);
 #define store_bounded_int(file_name, object, lo_bound, hi_bound) __store_int(file_name, object, input < lo_bound || input > hi_bound, input, if (0){ };);
 #define store_int_conv(file_name, object, conversion) __store_int(file_name, object, false, conversion, if(0){ };);
+#define store_bounded_int_conv(file_name, object, lo_bound, hi_bound, conv) __store_int(file_name, object, input < lo_bound || input > hi_bound, conv, if (0){ };);
 
 store_int(sampling_down_factor_relax, sampling_down_factor_relax);
 store_bounded_int(sampling_down_factor, sampling_down_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
@@ -309,7 +314,7 @@ store_int_conv(input_boost_ms, input_boost_us, input*1000);
 store_bounded_int(standby_delay_factor, standby_delay_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 store_bounded_int(standby_sampling_up_factor, standby_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 store_bounded_int(suspend_sampling_up_factor, suspend_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
-store_bounded_int(freq_step, freq_step, 0, 100);
+store_bounded_int_conv(freq_step, freq_step, 0, 100, input*128/100);
 
 __store_int(suspend_sampling_rate, suspend_sampling_rate,
 		input < min_sampling_rate,
@@ -539,7 +544,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		return;
 
 	//TODO calculate this only once at param/policy change?
-	freq_target = (dbs_tuners_ins.freq_step * policy->max) / 100;
+	freq_target = (dbs_tuners_ins.freq_step * policy->max) >> 7;
 
 	/* max freq cannot be less than 100. But who knows.... */
 	if (unlikely(freq_target == 0))
