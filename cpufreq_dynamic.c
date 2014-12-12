@@ -67,6 +67,7 @@ struct cpu_dbs_info_s {
 	cputime64_t prev_cpu_idle;
 	cputime64_t prev_cpu_wall;
 	cputime64_t prev_cpu_nice;
+	cputime64_t prev_cpu_io;
 	struct cpufreq_policy *cur_policy;
 	struct cpufreq_frequency_table *freq_table;
 	unsigned int freq_lo;
@@ -135,7 +136,7 @@ static struct dbs_tuners {
 	.sampling_down_factor_relax = 0,
 
 	.ignore_nice = 1,
-	.io_is_busy = 0,
+	.io_is_busy = 15,
 	.freq_step = 10*128/100,
 
 	.input_boost_freq = 400000,
@@ -169,14 +170,14 @@ static inline cputime64_t get_cpu_idle_time_jiffy(unsigned int cpu,
 	return (cputime64_t)jiffies_to_usecs(idle_time);
 }
 
-static inline cputime64_t get_cpu_idle_time(unsigned int cpu, cputime64_t *wall)
+static inline cputime64_t get_cpu_idle_time(unsigned int cpu, cputime64_t *wall, u64 *iowait)
 {
 	u64 idle_time = get_cpu_idle_time_us(cpu, wall);
 
 	if (idle_time == -1ULL)
 		return get_cpu_idle_time_jiffy(cpu, wall);
-	else if (!dbs_tuners_ins.io_is_busy)
-		idle_time += get_cpu_iowait_time_us(cpu, wall);
+	else if (dbs_tuners_ins.io_is_busy != 1)
+		*iowait = get_cpu_iowait_time_us(cpu, wall);
 
 	return idle_time;
 }
@@ -277,7 +278,7 @@ show_one(sampling_down_factor_relax, sampling_down_factor_relax);
 show_one(up_threshold, up_threshold);
 show_one(down_differential, down_differential);
 show_one(ignore_nice_load, ignore_nice);
-show_one(io_is_busy, io_is_busy);
+show_one_conv(io_is_busy, io_is_busy, (value+1)*100/128);
 show_one_conv(freq_step, freq_step, (value+1)*100/128);
 
 show_one(input_boost_freq, input_boost_freq);
@@ -349,7 +350,7 @@ __store_int(down_differential, down_differential,
 static ssize_t store_io_is_busy(struct kobject *a, struct attribute *b,
 				      const char *buf, size_t count)
 {
-	unsigned int input;
+	unsigned int input, prev = dbs_tuners_ins.io_is_busy;
 	int ret;
 
 	unsigned int j;
@@ -358,22 +359,25 @@ static ssize_t store_io_is_busy(struct kobject *a, struct attribute *b,
 	if (ret != 1)
 		return -EINVAL;
 
-	if (input > 1)
+	if (input >= 100)
 		input = 1;
 
 	if (input == dbs_tuners_ins.io_is_busy) /* nothing to do */
 		return count;
 
-	dbs_tuners_ins.io_is_busy = input;
+	dbs_tuners_ins.io_is_busy = input*128/100;
 
-	/* we need to re-evaluate prev_cpu_idle */
+	// if io_is_busy == 1 then we just ignore cpu io time completely
+	// otherwise we have to keep track of it
+	if (dbs_tuners_ins.io_is_busy == 1) return count;
+
+	// if it has been changed from some other non 1 value, prev_cpu_io values are up to date
+	if (prev != 1) return count;
+
 	for_each_online_cpu(j) {
 		struct cpu_dbs_info_s *dbs_info;
 		dbs_info = &per_cpu(cs_cpu_dbs_info, j);
-		dbs_info->prev_cpu_idle = get_cpu_idle_time(j,
-						&dbs_info->prev_cpu_wall);
-		if (dbs_tuners_ins.ignore_nice)
-			dbs_info->prev_cpu_nice = kstat_cpu(j).cpustat.nice;
+		dbs_info->prev_cpu_io = get_cpu_iowait_time_us(j, NULL);
 	}
 	return count;
 }
@@ -393,19 +397,15 @@ static ssize_t store_ignore_nice_load(struct kobject *a, struct attribute *b,
 	if (input > 1)
 		input = 1;
 
-	if (input == dbs_tuners_ins.ignore_nice) /* nothing to do */
+	if (input == dbs_tuners_ins.ignore_nice || input == 0) /* nothing to do */
 		return count;
 
 	dbs_tuners_ins.ignore_nice = input;
 
-	/* we need to re-evaluate prev_cpu_idle */
 	for_each_online_cpu(j) {
 		struct cpu_dbs_info_s *dbs_info;
 		dbs_info = &per_cpu(cs_cpu_dbs_info, j);
-		dbs_info->prev_cpu_idle = get_cpu_idle_time(j,
-						&dbs_info->prev_cpu_wall);
-		if (dbs_tuners_ins.ignore_nice)
-			dbs_info->prev_cpu_nice = kstat_cpu(j).cpustat.nice;
+		dbs_info->prev_cpu_nice = kstat_cpu(j).cpustat.nice;
 	}
 	return count;
 }
@@ -484,12 +484,12 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	/* Get Absolute Load */
 	for_each_cpu(j, policy->cpus) {
 		struct cpu_dbs_info_s *j_dbs_info;
-		cputime64_t cur_wall_time, cur_idle_time;
-		unsigned int idle_time, wall_time;
+		cputime64_t cur_wall_time, cur_idle_time, cur_io_time=0;
+		unsigned int idle_time, wall_time, io_time;
 
 		j_dbs_info = &per_cpu(cs_cpu_dbs_info, j);
 
-		cur_idle_time = get_cpu_idle_time(j, &cur_wall_time);
+		cur_idle_time = get_cpu_idle_time(j, &cur_wall_time, &cur_io_time);
 
 		wall_time = (unsigned int) cputime64_sub(cur_wall_time,
 				j_dbs_info->prev_cpu_wall);
@@ -498,6 +498,17 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		idle_time = (unsigned int) cputime64_sub(cur_idle_time,
 				j_dbs_info->prev_cpu_idle);
 		j_dbs_info->prev_cpu_idle = cur_idle_time;
+
+		if (dbs_tuners_ins.io_is_busy != 1) {
+			io_time = (unsigned int) cputime64_sub(cur_io_time,
+					j_dbs_info->prev_cpu_io);
+			j_dbs_info->prev_cpu_io = cur_io_time;
+
+			if (dbs_tuners_ins.io_is_busy == 0)
+				idle_time += io_time;
+			else
+				idle_time += min(io_time, (wall_time*(128-dbs_tuners_ins.io_is_busy))>>7);
+		}
 
 		if (dbs_tuners_ins.ignore_nice) {
 			cputime64_t cur_nice;
@@ -822,7 +833,7 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 			j_dbs_info->cur_policy = policy;
 
 			j_dbs_info->prev_cpu_idle = get_cpu_idle_time(j,
-						&j_dbs_info->prev_cpu_wall);
+						&j_dbs_info->prev_cpu_wall, &j_dbs_info->prev_cpu_io);
 			if (dbs_tuners_ins.ignore_nice) {
 				j_dbs_info->prev_cpu_nice =
 						kstat_cpu(j).cpustat.nice;
