@@ -130,13 +130,13 @@ static struct dbs_tuners {
 	.up_threshold = DEF_FREQUENCY_UP_THRESHOLD,
 	.down_differential = DEF_DOWN_DIFFERENTIAL,
 	.suspend_sampling_up_factor = 7,
-	.standby_sampling_up_factor = 3,
+	.standby_sampling_up_factor = 4,
 	.standby_delay_factor = 1,
 	.sampling_down_factor = 2,
-	.sampling_down_factor_relax = 6,
+	.sampling_down_factor_relax = 5,
 
 	.ignore_nice = 1,
-	.io_is_busy = 15,
+	.io_is_busy = 20*128/100,
 	.freq_step = 10*128/100,
 
 	.input_boost_freq = 400000,
