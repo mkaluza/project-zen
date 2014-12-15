@@ -499,12 +499,12 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 				j_dbs_info->prev_cpu_idle);
 		j_dbs_info->prev_cpu_idle = cur_idle_time;
 
-		if (dbs_tuners_ins.io_is_busy != 1) {
+		if (dbs_tuners_ins.io_is_busy != 1 || active == 0) {
 			io_time = (unsigned int) cputime64_sub(cur_io_time,
 					j_dbs_info->prev_cpu_io);
 			j_dbs_info->prev_cpu_io = cur_io_time;
 
-			if (dbs_tuners_ins.io_is_busy == 0)
+			if (dbs_tuners_ins.io_is_busy == 0 || active == 0)
 				idle_time += io_time;
 			else
 				idle_time += min(io_time, (wall_time*(128-dbs_tuners_ins.io_is_busy))>>7);
