@@ -169,9 +169,16 @@ static void check_list(int pid, int adj) {
 cputime_t utime_start, stime_start, cutime_start, cstime_start;
 cputime_t utime_end, stime_end, cutime_end, cstime_end;
 
+static void renice(struct task_struct *task, int nice) {
+	struct task_struct *thread = task;
+	do {
+		set_user_nice(thread, 0);
+	} while_each_thread(task, thread);
+}
+
 static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, void *t)
 {
-	struct task_struct *task = (struct task_struct *)t, *thread;
+	struct task_struct *task = (struct task_struct *)t;
 	struct task_struct *oldtask;
 	struct fg_pid_struct *el;
 
@@ -198,6 +205,11 @@ static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, v
 
 	check_list(task->pid, oom_adj);
 	if (list_empty(&fg_pids_list)) {
+		oldtask = get_pid_task(fg_pid, PIDTYPE_PID);//TGID?
+		if (oldtask) {
+			renice(oldtask, 0);
+			put_task_struct(oldtask);
+		}
 		fg_pid_nr = 0;
 		fg_pid = NULL;
 		if (fg_task) put_task_struct(fg_task);
@@ -229,17 +241,10 @@ static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, v
 		}
 		printk(KERN_ERR "app_monitor: fg_pid\n");
 		oldtask = get_pid_task(fg_pid, PIDTYPE_PID);//TGID?
-		if (!oldtask) {
-			printk(KERN_ERR "app_monitor: old task not found - can't calculate cputime used\n");
-			goto notfound;
+		if (oldtask) {
+			renice(oldtask, 0);
+			put_task_struct(oldtask);
 		}
-
-		thread = oldtask;
-		do {
-			set_user_nice(thread, 0);
-		} while_each_thread(oldtask, thread);
-
-		put_task_struct(oldtask);
 notfound:
 
 		thread_group_cputime(task, &prev_app_time);
@@ -247,10 +252,7 @@ notfound:
 		fg_pid_nr = task->pid;
 		fg_pid = el->pid;
 
-		thread = task;
-		do {
-			set_user_nice(thread, -10);
-		} while_each_thread(task, thread);
+		renice(task, -10);
 	}
 	return NOTIFY_DONE;
 }
