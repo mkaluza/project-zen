@@ -485,7 +485,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	for_each_cpu(j, policy->cpus) {
 		struct cpu_dbs_info_s *j_dbs_info;
 		cputime64_t cur_wall_time, cur_idle_time, cur_io_time=0;
-		unsigned int idle_time, wall_time, io_time;
+		unsigned int idle_time, wall_time;
 
 		j_dbs_info = &per_cpu(cs_cpu_dbs_info, j);
 
@@ -500,14 +500,17 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		j_dbs_info->prev_cpu_idle = cur_idle_time;
 
 		if (dbs_tuners_ins.io_is_busy != 1 || active == 0) {
-			io_time = (unsigned int) cputime64_sub(cur_io_time,
+			unsigned int io_time = (unsigned int) cputime64_sub(cur_io_time,
 					j_dbs_info->prev_cpu_io);
 			j_dbs_info->prev_cpu_io = cur_io_time;
 
 			if (dbs_tuners_ins.io_is_busy == 0 || active == 0)
 				idle_time += io_time;
-			else
-				idle_time += min(io_time, (wall_time*(128-dbs_tuners_ins.io_is_busy))>>7);
+			else {
+				unsigned int max_busy_io_time = (wall_time*dbs_tuners_ins.io_is_busy) >> 7;
+				if (io_time >= max_busy_io_time)
+					idle_time += io_time - max_busy_io_time;
+			}
 		}
 
 		if (dbs_tuners_ins.ignore_nice) {
