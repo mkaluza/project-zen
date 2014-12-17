@@ -173,6 +173,8 @@ static struct dbs_tuners {
 	.suspend_max_freq = 600000,
 };
 
+static struct workqueue_struct *dbs_wq;
+
 static unsigned int delay;
 module_param(delay, uint, 0644);
 
@@ -815,7 +817,7 @@ static void do_dbs_timer(struct work_struct *work)
 	dbs_check_cpu(dbs_info);
 
 	/* We want all CPUs to do sampling nearly on same jiffy */
-	schedule_delayed_work_on(cpu, &dbs_info->work, delay - jiffies % delay);
+	queue_delayed_work_on(cpu, dbs_wq, &dbs_info->work, delay - jiffies % delay);
 	mutex_unlock(&dbs_info->timer_mutex);
 }
 
@@ -828,7 +830,7 @@ static inline void dbs_timer_init(struct cpu_dbs_info_s *dbs_info)
 	INIT_DELAYED_WORK_DEFERRABLE(&dbs_info->work, do_dbs_timer);
 
 	/* We want all CPUs to do sampling nearly on same jiffy */
-	schedule_delayed_work_on(dbs_info->cpu, &dbs_info->work, delay - jiffies % delay);
+	queue_delayed_work_on(dbs_info->cpu, dbs_wq, &dbs_info->work, delay - jiffies % delay);
 }
 
 static inline void dbs_timer_exit(struct cpu_dbs_info_s *dbs_info)
@@ -1148,12 +1150,19 @@ static int __init cpufreq_gov_dbs_init(void)
 			MIN_SAMPLING_RATE_RATIO * jiffies_to_usecs(10);
 	}
 
+	dbs_wq = alloc_workqueue("dynamic_dbs_wq", WQ_HIGHPRI, 0);
+	if (!dbs_wq) {
+		printk(KERN_ERR "Failed to create dynamic_dbs_wq workqueue\n");
+		return -EFAULT;
+	}
+
 	return cpufreq_register_governor(&cpufreq_gov_dynamic);
 }
 
 static void __exit cpufreq_gov_dbs_exit(void)
 {
 	cpufreq_unregister_governor(&cpufreq_gov_dynamic);
+	destroy_workqueue(dbs_wq);
 }
 
 
