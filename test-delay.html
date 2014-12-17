@@ -1,23 +1,40 @@
 <html>
 <head>
 <style>
+BODY {
+	font-size:36px;
+}
 #marker {
-	position: relative;
-	width: 50px;
-	height:50px;
+	width: 99%;
+	height:100px;
+	margin: 2px;
+	padding: 2px;
+	border: 1px solid black;
+	vertical-align: middle;
+	text-align: center;
 }
 button {
 	min-height:30px;
 }
 
 #controls > button {
-	min-width: 40px;
+	min-width: 100px;
+	width: 32%;
+	font-size: 36px;
+	padding: 10px
+}
+
+#controls {
+	text-align: center;
+}
+
+#output,#sstatus {
+	font-size: 14px;
 }
 </style>
 </head>
 <BODY>
-	<div id=marker></div>
-	<button id=starter onclick="timeIt();">Press me</button>
+	<div id=marker onclick="timeIt();">Tap me :)</div>
 	<br>
 	<div id=controls>
 		<button onclick="rate(-1);">-1</button>
@@ -45,10 +62,11 @@ button {
 
 		}
 		function timeIt() {
+			marker.onclick=undefined;
 			timeout=Math.round(Math.random()*(tmax-tmin)+tmin);
 			setTimeout(onTimer, timeout);
 			tstart=new Date();
-			starter.disabled=true;
+			
 		}
 		function onTimer() {
 			dt=(new Date()).getTime()-tstart.getTime();
@@ -57,7 +75,7 @@ button {
 		}
 		function rate(value) {
 			disableControls(true);
-			starter.disabled=false;
+			marker.onclick=timeIt;
 			marker.style.backgroundColor="white";
 			switch (value) {
 				case -1:
