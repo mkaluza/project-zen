@@ -2,40 +2,57 @@
 <head>
 <style>
 BODY {
-	font-size:36px;
+	font-size:16px;
+	font-family: sans-serif;
 }
+#container {
+	width: 400px;
+}
+
 #marker {
 	width: 99%;
-	height:100px;
-	margin: 2px;
-	padding: 2px;
+	margin: 5px 0px;
+	padding: 35px 0px;
 	border: 1px solid black;
-	vertical-align: middle;
 	text-align: center;
+	font-size: 36px;
 }
 button {
-	min-height:30px;
+	min-height:20px;
 }
 
 #controls > button {
 	min-width: 100px;
-	width: 32%;
+	width: 30%;
 	font-size: 36px;
 	padding: 10px
 }
 
 #controls {
 	text-align: center;
+	margin: 20px 0px;
 }
 
 #output,#sstatus {
-	font-size: 14px;
+	font-size: 16px;
 }
+
 </style>
 </head>
 <BODY>
+	<div id=container>
+		<div id=manual>
+			Tap the box as if it was some action you wanted to do (i.e. open a text message), then rate the delay as:
+			<ul>
+				<li> 1 - ok
+				<li> 0 - a bit annoying, but acceptable from time to time
+				<li> -1 - unacceptably long
+			</ul>
+			<br>
+			<button onclick="manual.style.display='none';contents.style.display='block';"> Ok, I get it </button>
+		</div>
+	<div id=contents style="display:none">
 	<div id=marker onclick="timeIt();">Tap me :)</div>
-	<br>
 	<div id=controls>
 		<button onclick="rate(-1);">-1</button>
 		<button onclick="rate(0);">0</button>
@@ -46,10 +63,13 @@ button {
 	<hr>
 	<div id=output>
 	</div>
+	</div>
+</div>
 	<script type="text/javascript">
 		var timeout, tmax=1000, tmin=0;
 		var results=[[],[],[]];
-		var starter=document.getElementById("starter");
+		var contents=document.getElementById("contents");
+		var manual=document.getElementById("manual");
 		var sstatus=document.getElementById("sstatus");
 		var output=document.getElementById("output");
 		var controls=document.getElementById("controls");
@@ -63,6 +83,7 @@ button {
 		}
 		function timeIt() {
 			marker.onclick=undefined;
+			marker.style.backgroundColor="#FF0";
 			timeout=Math.round(Math.random()*(tmax-tmin)+tmin);
 			setTimeout(onTimer, timeout);
 			tstart=new Date();
@@ -70,7 +91,7 @@ button {
 		}
 		function onTimer() {
 			dt=(new Date()).getTime()-tstart.getTime();
-			marker.style.backgroundColor="green";
+			marker.style.backgroundColor="#0F0";
 			disableControls(false);
 		}
 		function rate(value) {
@@ -90,7 +111,7 @@ button {
 			res.sort(function(a, b){return a-b});
 			sstatus.innerHTML="tmin: "+tmin+", tmax: "+tmax;
 			for(i in results) 
-				sstatus.innerHTML+="<br>"+results[i];
+				sstatus.innerHTML+="<br>"+results[i].join(", ");
 			//output.innerHTML=dt+"("+timeout+")"+": "+value+"</br>"+output.innerHTML;
 			output.innerHTML=dt+": "+value+"</br>"+output.innerHTML;
 		}
