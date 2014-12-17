@@ -16,3 +16,5 @@ do
 		rm -f "$f"
 	fi
 done
+
+adb shell showprop.sh /sys/devices/system/cpu/cpufreq/\*/ > $dest/settings
