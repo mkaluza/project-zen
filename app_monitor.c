@@ -174,8 +174,6 @@ static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, v
 	struct task_struct *task = (struct task_struct *)t, *thread;
 	struct task_struct *oldtask;
 	struct fg_pid_struct *el;
-	struct signal_struct *sig;
-	cputime_t ut, st;
 
 	//TODO lock
 	if (
@@ -241,24 +239,8 @@ static int oom_adj_changed(struct notifier_block *self, unsigned long oom_adj, v
 			set_user_nice(thread, 0);
 		} while_each_thread(oldtask, thread);
 
-		printk(KERN_ERR "app_monitor: oldtask\n");
-		sig = oldtask->signal;
-		cutime_end = sig->cutime;
-		cstime_end = sig->cstime;
-		utime_end = oldtask->utime;
-		stime_end = oldtask->stime;
-		printk(KERN_ERR "app_monitor: oldtask %lu %lu %lu %lu\n", utime_end, stime_end, cutime_end, cstime_end);
-		printk(KERN_ERR "app_monitor: cputime used utime: %lu, stime: %lu, cutime: %lu, cstime: %lu", utime_end-utime_start, stime_end-stime_start, cutime_end-cutime_start, cstime_end-cstime_start);
-		thread_group_times(oldtask, &ut, &st);
-		printk(KERN_ERR "app_monitor: oldtask thread_group_times: user:%lu system:%lu \n", ut, st);
 		put_task_struct(oldtask);
 notfound:
-		sig = task->signal;
-		cutime_start = sig->cutime;
-		cstime_start = sig->cstime;
-		utime_start = task->utime;
-		stime_start = task->stime;
-		printk(KERN_ERR "app_monitor: sighand %lu %lu %lu %lu\n", utime_start, stime_start, cutime_start, cstime_start);
 
 		thread_group_cputime(task, &prev_app_time);
 
