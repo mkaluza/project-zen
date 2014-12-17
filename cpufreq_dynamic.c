@@ -460,7 +460,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 {
 	unsigned int load = 0;
 	unsigned int max_load = 0;
-	unsigned int freq_target;
+	unsigned int freq_target, freq_delta;
 	unsigned int min_supporting_freq = 0;
 
 	struct cpufreq_policy *policy;
@@ -538,8 +538,9 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 	if (boosted) {
 		//freq_target = suspend ? (dbs_tuners_ins.suspend_max_freq ? dbs_tuners_ins.suspend_max_freq : policy->max) : dbs_tuners_ins.input_boost_freq;
+		//TODO decide which algorithm to use - max freq on input when on suspend can result in faster wakeup, and input on suspend doesn't happen very often
+		//so power cost is very little...
 		freq_target = suspend ? policy->max : dbs_tuners_ins.input_boost_freq;
-		//freq_target = dbs_tuners_ins.input_boost_freq;
 		if (policy->cur < freq_target) {
 			this_dbs_info->requested_freq = freq_target;
 			__cpufreq_driver_target(policy, freq_target, CPUFREQ_RELATION_H);
@@ -555,11 +556,11 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		return;
 
 	//TODO calculate this only once at param/policy change?
-	freq_target = (dbs_tuners_ins.freq_step * policy->max) >> 7;
+	freq_delta = (dbs_tuners_ins.freq_step * policy->max) >> 7;
 
 	/* max freq cannot be less than 100. But who knows.... */
-	if (unlikely(freq_target == 0))
-		freq_target = 5;
+	if (unlikely(freq_delta == 0))
+		freq_delta = 5;
 
 	/* Check for frequency increase */
 	if (max_load > (active ? dbs_tuners_ins.up_threshold : 99)) {
@@ -582,7 +583,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 		this_dbs_info->sampling_up_counter = 0;
 
-		this_dbs_info->requested_freq += freq_target;
+		this_dbs_info->requested_freq += freq_delta;
 		if (this_dbs_info->requested_freq > policy->max)
 			this_dbs_info->requested_freq = policy->max;
 
@@ -620,15 +621,15 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		if (active) {
 			if (++(this_dbs_info->down_skip) < dbs_tuners_ins.sampling_down_factor) {
 				//if the frequency that can support current load
-				//is at least sampling_down_factor_relax*freq_target
+				//is at least sampling_down_factor_relax*freq_delta
 				//smaller than current freq then try decreasing freq by one step
 				//despite sampling_down_factor timer ticks haven't passed yet
 				if (!dbs_tuners_ins.sampling_down_factor_relax)
 					return;
-				if (min_supporting_freq > this_dbs_info->requested_freq - freq_target * dbs_tuners_ins.sampling_down_factor_relax)
+				if (min_supporting_freq > this_dbs_info->requested_freq - freq_delta * dbs_tuners_ins.sampling_down_factor_relax)
 					return;
 			}
-			this_dbs_info->requested_freq -= freq_target;
+			this_dbs_info->requested_freq -= freq_delta;
 		} else {
 			//Go directly to the lowest frequency that can support current load
 			this_dbs_info->requested_freq = min_supporting_freq;
