@@ -342,7 +342,7 @@ __store_int(up_threshold, up_threshold,
 		);
 
 __store_int(down_differential, down_differential,
-		input > 100 || input <= dbs_tuners_ins.up_threshold,
+		input > 100 || input <= 0,
 		input,
 		recalculate_down_threshold_all()
 		);
