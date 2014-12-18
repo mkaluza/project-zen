@@ -293,7 +293,7 @@ static ssize_t store_##file_name(struct kobject *a, struct attribute *b, const c
 	int ret;	\
 	ret = sscanf(buf, "%u", &input);	\
 \
-	if (ret != 1 || (condition))	\
+	if (ret != 1 || !(condition))	\
 		return -EINVAL;	\
 \
 	dbs_tuners_ins.object = conversion;	\
@@ -302,10 +302,10 @@ static ssize_t store_##file_name(struct kobject *a, struct attribute *b, const c
 }
 
 #define store_int_cond(file_name, object, condition) __store_int(file_name, object, condition, input, if(0) {};);
-#define store_int(file_name, object) __store_int(file_name, object, false, input, if (0){};);
-#define store_bounded_int(file_name, object, lo_bound, hi_bound) __store_int(file_name, object, input < lo_bound || input > hi_bound, input, if (0){ };);
-#define store_int_conv(file_name, object, conversion) __store_int(file_name, object, false, conversion, if(0){ };);
-#define store_bounded_int_conv(file_name, object, lo_bound, hi_bound, conv) __store_int(file_name, object, input < lo_bound || input > hi_bound, conv, if (0){ };);
+#define store_int(file_name, object) __store_int(file_name, object, true, input, if (0){};);
+#define store_bounded_int(file_name, object, lo_bound, hi_bound) __store_int(file_name, object, lo_bound <= input && input <= hi_bound, input, if (0){ };);
+#define store_int_conv(file_name, object, conversion) __store_int(file_name, object, true, conversion, if(0){ };);
+#define store_bounded_int_conv(file_name, object, lo_bound, hi_bound, conv) __store_int(file_name, object, lo_bound <= input && input <= hi_bound, conv, if (0){ };);
 
 store_int(sampling_down_factor_relax, sampling_down_factor_relax);
 store_bounded_int(sampling_down_factor, sampling_down_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
@@ -318,31 +318,31 @@ store_bounded_int(suspend_sampling_up_factor, suspend_sampling_up_factor, 1, MAX
 store_bounded_int_conv(freq_step, freq_step, 0, 100, input*128/100);
 
 __store_int(suspend_sampling_rate, suspend_sampling_rate,
-		input < min_sampling_rate,
+		input >= min_sampling_rate,
 		usecs_to_jiffies(max(input, min_sampling_rate)),
 		if (suspend) delay = dbs_tuners_ins.suspend_sampling_rate
 		);
 
 __store_int(standby_sampling_rate, standby_sampling_rate,
-		input < min_sampling_rate,
+		input >= min_sampling_rate,
 		usecs_to_jiffies(max(input, min_sampling_rate)),
 		if (standby) delay = dbs_tuners_ins.standby_sampling_rate
 		);
 
 __store_int(sampling_rate, sampling_rate,
-		input < min_sampling_rate,
+		input >= min_sampling_rate,
 		usecs_to_jiffies(max(input, min_sampling_rate)),
 		if (!(standby || suspend)) delay = dbs_tuners_ins.sampling_rate
 		);
 
 __store_int(up_threshold, up_threshold,
-		input > 100 || input <= dbs_tuners_ins.down_differential,
+		dbs_tuners_ins.down_differential < input && input <= 100,
 		input,
 		recalculate_down_threshold_all()
 		);
 
 __store_int(down_differential, down_differential,
-		input > 100 || input <= 0,
+		0 < input  && input < dbs_tuners_ins.up_threshold,
 		input,
 		recalculate_down_threshold_all()
 		);
