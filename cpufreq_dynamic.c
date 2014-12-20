@@ -545,6 +545,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		//so power cost is very little...
 		freq_target = suspend ? policy->max : dbs_tuners_ins.input_boost_freq;
 		if (policy->cur < freq_target) {
+			pr_debug("Boosting freq from %d to %d", this_dbs_info->requested_freq, freq_target);
 			this_dbs_info->requested_freq = freq_target;
 			__cpufreq_driver_target(policy, freq_target, CPUFREQ_RELATION_H);
 			return;
@@ -602,8 +603,10 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	 */
 	if (policy->cur == policy->min) {
 		if (active) {
-			if (++(this_dbs_info->standby_counter) >= dbs_tuners_ins.standby_delay_factor)
+			if (++(this_dbs_info->standby_counter) >= dbs_tuners_ins.standby_delay_factor) {
 				standby = true;
+				pr_debug("Entering standby");
+			}
 
 			//TODO move all state management code to functions and just call go_active, go_suspend etc...
 			delay = dbs_tuners_ins.standby_sampling_rate;
