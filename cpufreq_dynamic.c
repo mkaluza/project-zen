@@ -315,6 +315,7 @@ static ssize_t store_##file_name(struct kobject *a, struct attribute *b, const c
 
 store_int(sampling_down_factor_relax, sampling_down_factor_relax);
 store_bounded_int(sampling_down_factor, sampling_down_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
+store_bounded_int(ignore_nice_load, ignore_nice, 0, IGNORE_NICE_ALWAYS);
 store_int(suspend_max_freq, suspend_max_freq);
 store_int(input_boost_freq, input_boost_freq);
 store_int_conv(input_boost_ms, input_boost_us, input*1000);
@@ -384,34 +385,6 @@ static ssize_t store_io_is_busy(struct kobject *a, struct attribute *b,
 		struct cpu_dbs_info_s *dbs_info;
 		dbs_info = &per_cpu(cs_cpu_dbs_info, j);
 		dbs_info->prev_cpu_io = get_cpu_iowait_time_us(j, NULL);
-	}
-	return count;
-}
-
-static ssize_t store_ignore_nice_load(struct kobject *a, struct attribute *b,
-				      const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-
-	unsigned int j;
-
-	ret = sscanf(buf, "%u", &input);
-	if (ret != 1)
-		return -EINVAL;
-
-	if (input > 1)
-		input = 1;
-
-	if (input == dbs_tuners_ins.ignore_nice || input == 0) /* nothing to do */
-		return count;
-
-	dbs_tuners_ins.ignore_nice = input;
-
-	for_each_online_cpu(j) {
-		struct cpu_dbs_info_s *dbs_info;
-		dbs_info = &per_cpu(cs_cpu_dbs_info, j);
-		dbs_info->prev_cpu_nice = kstat_cpu(j).cpustat.nice;
 	}
 	return count;
 }
