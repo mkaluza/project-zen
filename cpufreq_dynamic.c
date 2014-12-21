@@ -125,7 +125,6 @@ static struct dbs_tuners {
 	unsigned int up_threshold;
 	unsigned int down_differential;
 	unsigned int ignore_nice;
-	unsigned int freq_step;
 	unsigned int io_is_busy;
 
 	unsigned int input_boost_freq;
@@ -143,7 +142,6 @@ static struct dbs_tuners {
 
 	.ignore_nice = 0,
 	.io_is_busy = 20*128/100,
-	.freq_step = 10*128/100,
 
 	.input_boost_freq = 400000,
 	.input_boost_us = 100*1000,
@@ -285,7 +283,6 @@ show_one(up_threshold, up_threshold);
 show_one(down_differential, down_differential);
 show_one(ignore_nice_load, ignore_nice);
 show_one_conv(io_is_busy, io_is_busy, (value+1)*100/128);
-show_one_conv(freq_step, freq_step, (value+1)*100/128);
 
 show_one(input_boost_freq, input_boost_freq);
 show_one(input_boost_ms, input_boost_us/1000);
@@ -322,7 +319,6 @@ store_int_conv(input_boost_ms, input_boost_us, input*1000);
 store_bounded_int(standby_delay_factor, standby_delay_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 store_bounded_int(standby_sampling_up_factor, standby_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 store_bounded_int(suspend_sampling_up_factor, suspend_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
-store_bounded_int_conv(freq_step, freq_step, 0, 100, input*128/100);
 
 __store_int(suspend_sampling_rate, suspend_sampling_rate,
 		input >= min_sampling_rate,
@@ -401,7 +397,6 @@ define_one_global_rw(up_threshold);
 define_one_global_rw(down_differential);
 define_one_global_rw(ignore_nice_load);
 define_one_global_rw(io_is_busy);
-define_one_global_rw(freq_step);
 
 define_one_global_rw(suspend_max_freq);
 define_one_global_rw(input_boost_freq);
@@ -421,7 +416,6 @@ static struct attribute *dbs_attributes[] = {
 	&down_differential.attr,
 	&ignore_nice_load.attr,
 	&io_is_busy.attr,
-	&freq_step.attr,
 	&input_boost_freq.attr,
 	&input_boost_ms.attr,
 	&suspend_max_freq.attr,
@@ -439,7 +433,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 {
 	unsigned int load = 0;
 	unsigned int max_load = 0;
-	unsigned int freq_target, freq_delta;
+	unsigned int idx;
 	unsigned int min_supporting_freq = 0;
 
 	struct cpufreq_policy *policy;
@@ -526,7 +520,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		//freq_target = suspend ? (dbs_tuners_ins.suspend_max_freq ? dbs_tuners_ins.suspend_max_freq : policy->max) : dbs_tuners_ins.input_boost_freq;
 		//TODO decide which algorithm to use - max freq on input when on suspend can result in faster wakeup, and input on suspend doesn't happen very often
 		//so power cost is very little...
-		freq_target = suspend ? policy->max : dbs_tuners_ins.input_boost_freq;
+		unsigned int freq_target = suspend ? policy->max : dbs_tuners_ins.input_boost_freq;
 		if (policy->cur < freq_target) {
 			pr_debug("Boosting freq from %d to %d", this_dbs_info->requested_freq, freq_target);
 			this_dbs_info->requested_freq = freq_target;
@@ -534,20 +528,6 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 			return;
 		}
 	}
-
-	/*
-	 * break out if we 'cannot' reduce the speed as the user might
-	 * want freq_step to be zero
-	 */
-	if (dbs_tuners_ins.freq_step == 0)
-		return;
-
-	//TODO calculate this only once at param/policy change?
-	freq_delta = (dbs_tuners_ins.freq_step * policy->max) >> 7;
-
-	/* max freq cannot be less than 100. But who knows.... */
-	if (unlikely(freq_delta == 0))
-		freq_delta = 5;
 
 	/* Check for frequency increase */
 	if (max_load > (active ? dbs_tuners_ins.up_threshold : 99)) {
@@ -570,7 +550,9 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 		this_dbs_info->sampling_up_counter = 0;
 
-		this_dbs_info->requested_freq += freq_delta;
+		cpufreq_frequency_table_target(policy, this_dbs_info->freq_table, policy->cur + 1, CPUFREQ_RELATION_L, &idx);
+		this_dbs_info->requested_freq = this_dbs_info->freq_table[idx].frequency;
+
 		if (this_dbs_info->requested_freq > policy->max)
 			this_dbs_info->requested_freq = policy->max;
 
@@ -604,21 +586,26 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	/* Check for frequency decrease */
 
 	if (max_load < this_dbs_info->down_threshold && (!boosted || policy->cur > dbs_tuners_ins.input_boost_freq)) {
-		//calculate minimum freq that can support current workload (load_pct*cur_freq) with load < up_threshold+down_diff
+		//calculate minimum freq that can support current workload (load_pct*cur_freq) with load < up_threshold-down_diff
 		min_supporting_freq = (this_dbs_info->requested_freq*max_load)/(dbs_tuners_ins.up_threshold - dbs_tuners_ins.down_differential);
+		cpufreq_frequency_table_target(policy, this_dbs_info->freq_table, min_supporting_freq, CPUFREQ_RELATION_L, &idx);
+		min_supporting_freq = this_dbs_info->freq_table[idx].frequency;
+
 
 		if (active) {
 			if (++(this_dbs_info->down_skip) < dbs_tuners_ins.sampling_down_factor) {
 				//if the frequency that can support current load
-				//is at least sampling_down_factor_relax*freq_delta
+				//is at least sampling_down_factor_relax
 				//smaller than current freq then try decreasing freq by one step
 				//despite sampling_down_factor timer ticks haven't passed yet
-				if (!dbs_tuners_ins.sampling_down_factor_relax)
+				if (!dbs_tuners_ins.sampling_down_factor_relax || this_dbs_info->freq_lo < policy->min + dbs_tuners_ins.sampling_down_factor_relax)
 					return;
-				if (min_supporting_freq > this_dbs_info->requested_freq - freq_delta * dbs_tuners_ins.sampling_down_factor_relax)
+
+				cpufreq_frequency_table_target(policy, this_dbs_info->freq_table, this_dbs_info->freq_lo - dbs_tuners_ins.sampling_down_factor_relax, CPUFREQ_RELATION_L, &idx);
+				if (min_supporting_freq > this_dbs_info->freq_table[idx].frequency)
 					return;
 			}
-			this_dbs_info->requested_freq -= freq_delta;
+			this_dbs_info->requested_freq = this_dbs_info->freq_lo;
 		} else {
 			//Go directly to the lowest frequency that can support current load
 			this_dbs_info->requested_freq = min_supporting_freq;
