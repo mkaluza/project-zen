@@ -207,7 +207,7 @@ static inline void recalculate_down_threshold_all(void)
 
 /* keep track of frequency transitions */
 static int
-dbs_cpufreq_notifier(struct notifier_block *nb, unsigned long val,
+dbs_cpufreq_notifier(struct notifier_block *nb, unsigned long event,
 		     void *data)
 {
 	unsigned int idx;
@@ -218,7 +218,7 @@ dbs_cpufreq_notifier(struct notifier_block *nb, unsigned long val,
 	struct cpufreq_policy *policy;
 
 	if (!this_dbs_info->enable)
-		return 0;
+		return NOTIFY_DONE;
 
 	policy = this_dbs_info->cur_policy;
 
@@ -238,7 +238,7 @@ dbs_cpufreq_notifier(struct notifier_block *nb, unsigned long val,
 	} else 
 		 this_dbs_info->freq_lo = policy->min;
 
-	return 0;
+	return NOTIFY_OK;
 }
 
 static struct notifier_block dbs_cpufreq_notifier_block = {
