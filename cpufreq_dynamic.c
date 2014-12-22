@@ -127,6 +127,9 @@ static struct dbs_tuners {
 	unsigned int ignore_nice;
 	unsigned int io_is_busy;
 
+	unsigned int optimal_freq;
+	unsigned int high_freq_sampling_up_factor;
+
 	unsigned int input_boost_freq;
 	unsigned int input_boost_us;
 	unsigned int suspend_max_freq;
@@ -289,6 +292,9 @@ show_one(input_boost_ms, input_boost_us/1000);
 
 show_one(suspend_max_freq, suspend_max_freq);
 
+show_one(optimal_freq, optimal_freq);
+show_one(high_freq_sampling_up_factor, high_freq_sampling_up_factor);
+
 static bool verify_freq(unsigned int *freq) {
 	unsigned int idx, ret;
 	struct cpu_dbs_info_s *dbs_info = &per_cpu(cs_cpu_dbs_info, 0);
@@ -328,6 +334,8 @@ store_int_conv(input_boost_ms, input_boost_us, input*1000);
 store_bounded_int(standby_delay_factor, standby_delay_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 store_bounded_int(standby_sampling_up_factor, standby_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 store_bounded_int(suspend_sampling_up_factor, suspend_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
+store_int_cond(optimal_freq, optimal_freq, verify_freq(&input));
+store_bounded_int(high_freq_sampling_up_factor, high_freq_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 
 __store_int(suspend_sampling_rate, suspend_sampling_rate,
 		input >= min_sampling_rate,
@@ -411,6 +419,9 @@ define_one_global_rw(suspend_max_freq);
 define_one_global_rw(input_boost_freq);
 define_one_global_rw(input_boost_ms);
 
+define_one_global_rw(optimal_freq);
+define_one_global_rw(high_freq_sampling_up_factor);
+
 static struct attribute *dbs_attributes[] = {
 	&sampling_rate_min.attr,
 	&sampling_rate.attr,
@@ -428,6 +439,8 @@ static struct attribute *dbs_attributes[] = {
 	&input_boost_freq.attr,
 	&input_boost_ms.attr,
 	&suspend_max_freq.attr,
+	&optimal_freq.attr,
+	&high_freq_sampling_up_factor.attr,
 	NULL
 };
 
@@ -554,8 +567,11 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		} else if (standby) {
 			if (++(this_dbs_info->sampling_up_counter) < dbs_tuners_ins.standby_sampling_up_factor)
 				return;
-		} else 
-			delay = dbs_tuners_ins.sampling_rate;
+		} else {
+			//if we're at or above optimal freq, then delay freq increase by high_freq_sampling_up_factor
+			if (dbs_tuners_ins.optimal_freq && policy->cur >= dbs_tuners_ins.optimal_freq && ++(this_dbs_info->sampling_up_counter) < dbs_tuners_ins.high_freq_sampling_up_factor)
+				return;
+		}
 
 		this_dbs_info->sampling_up_counter = 0;
 
