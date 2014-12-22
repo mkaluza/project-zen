@@ -138,7 +138,7 @@ static struct dbs_tuners {
 	.standby_sampling_up_factor = 4,
 	.standby_delay_factor = 1,
 	.sampling_down_factor = 2,
-	.sampling_down_factor_relax_khz = 5,
+	.sampling_down_factor_relax_khz = 500000,
 
 	.ignore_nice = 0,
 	.io_is_busy = 20*128/100,
