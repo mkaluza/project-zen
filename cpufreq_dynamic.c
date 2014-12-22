@@ -289,6 +289,15 @@ show_one(input_boost_ms, input_boost_us/1000);
 
 show_one(suspend_max_freq, suspend_max_freq);
 
+static bool verify_freq(unsigned int *freq) {
+	unsigned int idx, ret;
+	struct cpu_dbs_info_s *dbs_info = &per_cpu(cs_cpu_dbs_info, 0);
+	ret = cpufreq_frequency_table_target(dbs_info->cur_policy, dbs_info->freq_table, *freq, CPUFREQ_RELATION_L, &idx);
+	if (ret) return false;
+	*freq = dbs_info->freq_table[idx].frequency;
+	return true;
+}
+
 #define __store_int(file_name, object, condition, conversion, pproc)	\
 static ssize_t store_##file_name(struct kobject *a, struct attribute *b, const char *buf, size_t count)	\
 {	\
@@ -313,8 +322,8 @@ static ssize_t store_##file_name(struct kobject *a, struct attribute *b, const c
 store_int(sampling_down_factor_relax_khz, sampling_down_factor_relax_khz);
 store_bounded_int(sampling_down_factor, sampling_down_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 store_bounded_int(ignore_nice_load, ignore_nice, 0, IGNORE_NICE_ALWAYS);
-store_int(suspend_max_freq, suspend_max_freq);
-store_int(input_boost_freq, input_boost_freq);
+store_int_cond(suspend_max_freq, suspend_max_freq, verify_freq(&input));
+store_int_cond(input_boost_freq, input_boost_freq, verify_freq(&input));
 store_int_conv(input_boost_ms, input_boost_us, input*1000);
 store_bounded_int(standby_delay_factor, standby_delay_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 store_bounded_int(standby_sampling_up_factor, standby_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
