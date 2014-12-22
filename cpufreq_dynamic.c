@@ -149,6 +149,8 @@ static struct dbs_tuners {
 	.input_boost_freq = 400000,
 	.input_boost_us = 100*1000,
 	.suspend_max_freq = 0,
+	.optimal_freq = 800000,
+	.high_freq_sampling_up_factor = 2,
 };
 
 static unsigned int delay;
