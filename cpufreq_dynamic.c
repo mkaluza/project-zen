@@ -440,17 +440,17 @@ static struct attribute_group dbs_attr_group = {
 
 static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 {
+	struct cpufreq_policy *policy = this_dbs_info->cur_policy;
+
 	unsigned int load = 0;
 	unsigned int max_load = 0;
 	unsigned int idx;
 	unsigned int min_supporting_freq = 0;
 
-	struct cpufreq_policy *policy;
-	unsigned int j;
 	bool boosted = (dbs_tuners_ins.input_boost_freq > 0) && (ktime_to_us(ktime_get()) < (last_input_time + dbs_tuners_ins.input_boost_us));
 	bool active = !(suspend || standby);
 
-	policy = this_dbs_info->cur_policy;
+	unsigned int j;
 
 	/*
 	 * Every sampling_rate, we check, if current idle time is less
