@@ -555,10 +555,20 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 	/* Check for frequency increase */
 	if (max_load > (active ? dbs_tuners_ins.up_threshold : 99)) {
+		unsigned int max_freq;
+
+		if (suspend)
+			max_freq = dbs_tuners_ins.suspend_max_freq ? dbs_tuners_ins.suspend_max_freq :
+			       dbs_tuners_ins.optimal_freq ? dbs_tuners_ins.optimal_freq : policy->max;
+		else if (standby)
+			max_freq = dbs_tuners_ins.optimal_freq ? dbs_tuners_ins.optimal_freq : policy->max;
+		else
+			max_freq = policy->max;
+
 		this_dbs_info->down_skip = 0;
 
 		/* if we are already at full speed then break out early */
-		if (this_dbs_info->requested_freq == policy->max || (suspend && dbs_tuners_ins.suspend_max_freq && this_dbs_info->requested_freq >= dbs_tuners_ins.suspend_max_freq))
+		if (this_dbs_info->requested_freq >= max_freq)
 			return;
 
 		this_dbs_info->standby_counter = 0;
