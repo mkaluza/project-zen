@@ -121,7 +121,7 @@ static struct dbs_tuners {
 	unsigned int standby_sampling_up_factor;
 	unsigned int standby_delay_factor;
 	unsigned int sampling_down_factor;
-	unsigned int sampling_down_factor_relax;
+	unsigned int sampling_down_factor_relax_khz;
 	unsigned int up_threshold;
 	unsigned int down_differential;
 	unsigned int ignore_nice;
@@ -138,7 +138,7 @@ static struct dbs_tuners {
 	.standby_sampling_up_factor = 4,
 	.standby_delay_factor = 1,
 	.sampling_down_factor = 2,
-	.sampling_down_factor_relax = 5,
+	.sampling_down_factor_relax_khz = 5,
 
 	.ignore_nice = 0,
 	.io_is_busy = 20*128/100,
@@ -278,7 +278,7 @@ show_one(suspend_sampling_up_factor, suspend_sampling_up_factor);
 show_one(standby_sampling_up_factor, standby_sampling_up_factor);
 show_one(standby_delay_factor, standby_delay_factor);
 show_one(sampling_down_factor, sampling_down_factor);
-show_one(sampling_down_factor_relax, sampling_down_factor_relax);
+show_one(sampling_down_factor_relax_khz, sampling_down_factor_relax_khz);
 show_one(up_threshold, up_threshold);
 show_one(down_differential, down_differential);
 show_one(ignore_nice_load, ignore_nice);
@@ -310,7 +310,7 @@ static ssize_t store_##file_name(struct kobject *a, struct attribute *b, const c
 #define store_int_conv(file_name, object, conversion) __store_int(file_name, object, true, conversion, if(0){ };);
 #define store_bounded_int_conv(file_name, object, lo_bound, hi_bound, conv) __store_int(file_name, object, lo_bound <= input && input <= hi_bound, conv, if (0){ };);
 
-store_int(sampling_down_factor_relax, sampling_down_factor_relax);
+store_int(sampling_down_factor_relax_khz, sampling_down_factor_relax_khz);
 store_bounded_int(sampling_down_factor, sampling_down_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 store_bounded_int(ignore_nice_load, ignore_nice, 0, IGNORE_NICE_ALWAYS);
 store_int(suspend_max_freq, suspend_max_freq);
@@ -392,7 +392,7 @@ define_one_global_rw(suspend_sampling_up_factor);
 define_one_global_rw(standby_sampling_up_factor);
 define_one_global_rw(standby_delay_factor);
 define_one_global_rw(sampling_down_factor);
-define_one_global_rw(sampling_down_factor_relax);
+define_one_global_rw(sampling_down_factor_relax_khz);
 define_one_global_rw(up_threshold);
 define_one_global_rw(down_differential);
 define_one_global_rw(ignore_nice_load);
@@ -406,7 +406,7 @@ static struct attribute *dbs_attributes[] = {
 	&sampling_rate_min.attr,
 	&sampling_rate.attr,
 	&sampling_down_factor.attr,
-	&sampling_down_factor_relax.attr,
+	&sampling_down_factor_relax_khz.attr,
 	&standby_sampling_rate.attr,
 	&standby_sampling_up_factor.attr,
 	&standby_delay_factor.attr,
@@ -595,13 +595,13 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		if (active) {
 			if (++(this_dbs_info->down_skip) < dbs_tuners_ins.sampling_down_factor) {
 				//if the frequency that can support current load
-				//is at least sampling_down_factor_relax
+				//is at least sampling_down_factor_relax_khz
 				//smaller than current freq then try decreasing freq by one step
 				//despite sampling_down_factor timer ticks haven't passed yet
-				if (!dbs_tuners_ins.sampling_down_factor_relax || this_dbs_info->freq_lo < policy->min + dbs_tuners_ins.sampling_down_factor_relax)
+				if (!dbs_tuners_ins.sampling_down_factor_relax_khz || this_dbs_info->freq_lo < policy->min + dbs_tuners_ins.sampling_down_factor_relax_khz)
 					return;
 
-				cpufreq_frequency_table_target(policy, this_dbs_info->freq_table, this_dbs_info->freq_lo - dbs_tuners_ins.sampling_down_factor_relax, CPUFREQ_RELATION_L, &idx);
+				cpufreq_frequency_table_target(policy, this_dbs_info->freq_table, this_dbs_info->freq_lo - dbs_tuners_ins.sampling_down_factor_relax_khz, CPUFREQ_RELATION_L, &idx);
 				if (min_supporting_freq > this_dbs_info->freq_table[idx].frequency)
 					return;
 			}
