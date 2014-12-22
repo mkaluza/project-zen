@@ -137,6 +137,10 @@ static struct dbs_tuners {
 	unsigned int input_boost_us;
 	unsigned int suspend_max_freq;
 
+//internal
+	unsigned int _suspend_max_freq_soft;
+	unsigned int _suspend_max_freq_hard;
+	unsigned int _standby_max_freq_soft;
 } dbs_tuners_ins = {
 	.up_threshold = DEF_FREQUENCY_UP_THRESHOLD,
 	.down_differential = DEF_DOWN_DIFFERENTIAL,
@@ -251,6 +255,48 @@ static struct notifier_block dbs_cpufreq_notifier_block = {
 	.notifier_call = dbs_cpufreq_notifier
 };
 
+static void recalculate_freq_limits(void) {
+		struct cpu_dbs_info_s *dbs_info = &per_cpu(cs_cpu_dbs_info, 0);
+		struct cpufreq_policy *policy = dbs_info->cur_policy;
+
+		//find suspend  hard limit
+		pr_debug("current limits: _standby_max_freq_soft: %d, _suspend_max_freq_soft: %d, _suspend_max_freq_hard:%d\n", dbs_tuners_ins._standby_max_freq_soft, dbs_tuners_ins._suspend_max_freq_soft, dbs_tuners_ins._suspend_max_freq_hard);
+		pr_debug("frequency settings: suspend_max_freq: %d, power_optimal_freq: %d, max_non_oc_freq: %d, policy->max: %d, oc_freq_limit_us: %d\n", dbs_tuners_ins.suspend_max_freq, dbs_tuners_ins.power_optimal_freq, dbs_tuners_ins.max_non_oc_freq, policy->max, dbs_tuners_ins.oc_freq_limit_us);
+		//TODO can't decide which of the two should be first...
+		if (dbs_tuners_ins.max_non_oc_freq && (dbs_tuners_ins.oc_freq_limit_us == 0 || (dbs_tuners_ins.power_optimal_freq == 0 && dbs_tuners_ins.suspend_max_freq == 0)))
+			dbs_tuners_ins._suspend_max_freq_hard = dbs_tuners_ins.max_non_oc_freq;
+		else if (dbs_tuners_ins.power_optimal_freq)
+			dbs_tuners_ins._suspend_max_freq_hard = dbs_tuners_ins.power_optimal_freq;
+		else if (dbs_tuners_ins.suspend_max_freq)
+			dbs_tuners_ins._suspend_max_freq_hard = dbs_tuners_ins.suspend_max_freq;
+		else
+			dbs_tuners_ins._suspend_max_freq_hard = policy->max;
+
+		//find suspend soft limit
+		if (dbs_tuners_ins.suspend_max_freq)
+			dbs_tuners_ins._suspend_max_freq_soft = dbs_tuners_ins.suspend_max_freq;
+		else if (dbs_tuners_ins.power_optimal_freq)
+			dbs_tuners_ins._suspend_max_freq_soft = dbs_tuners_ins.power_optimal_freq;
+		else
+			dbs_tuners_ins._suspend_max_freq_soft = policy->max;
+
+		//calculate standby soft freq limit
+		if (dbs_tuners_ins.max_non_oc_freq && ((dbs_tuners_ins.max_non_oc_freq < policy->max && dbs_tuners_ins.oc_freq_limit_us == 0) || dbs_tuners_ins.power_optimal_freq == 0))
+			dbs_tuners_ins._standby_max_freq_soft = dbs_tuners_ins.max_non_oc_freq;
+		else if (dbs_tuners_ins.power_optimal_freq)
+			dbs_tuners_ins._standby_max_freq_soft = dbs_tuners_ins.power_optimal_freq;
+		else
+			dbs_tuners_ins._standby_max_freq_soft = policy->max;
+
+		if (dbs_tuners_ins._suspend_max_freq_hard > policy->max)
+			dbs_tuners_ins._suspend_max_freq_hard = policy->max;
+		if (dbs_tuners_ins._suspend_max_freq_soft > policy->max)
+			dbs_tuners_ins._suspend_max_freq_soft = policy->max;
+		if (dbs_tuners_ins._standby_max_freq_soft > policy->max)
+			dbs_tuners_ins._standby_max_freq_soft = policy->max;
+
+		pr_debug("calculated limits: _standby_max_freq_soft: %d, _suspend_max_freq_soft: %d, _suspend_max_freq_hard:%d\n", dbs_tuners_ins._standby_max_freq_soft, dbs_tuners_ins._suspend_max_freq_soft, dbs_tuners_ins._suspend_max_freq_hard);
+}
 /************************** sysfs interface ************************/
 static ssize_t show_sampling_rate_min(struct kobject *kobj,
 				      struct attribute *attr, char *buf)
@@ -336,17 +382,17 @@ static ssize_t store_##file_name(struct kobject *a, struct attribute *b, const c
 store_int(sampling_down_factor_relax_khz, sampling_down_factor_relax_khz);
 store_bounded_int(sampling_down_factor, sampling_down_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 store_bounded_int(ignore_nice_load, ignore_nice, 0, IGNORE_NICE_ALWAYS);
-store_int_cond(suspend_max_freq, suspend_max_freq, input==0 || verify_freq(&input));
+__store_int(suspend_max_freq, suspend_max_freq, input==0 || verify_freq(&input), input, recalculate_freq_limits());
 store_int_cond(input_boost_freq, input_boost_freq, input==0 || verify_freq(&input));
 store_int_conv(input_boost_ms, input_boost_us, input*1000);
 store_bounded_int(standby_delay_factor, standby_delay_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 store_bounded_int(standby_sampling_up_factor, standby_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 store_bounded_int(suspend_sampling_up_factor, suspend_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
-store_int_cond(power_optimal_freq, power_optimal_freq, input==0 || verify_freq(&input));
+__store_int(power_optimal_freq, power_optimal_freq, input==0 || verify_freq(&input), input, recalculate_freq_limits());
 store_bounded_int(high_freq_sampling_up_factor, high_freq_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 
-store_int_cond(max_non_oc_freq, max_non_oc_freq, verify_freq(&input));
-store_int_conv(oc_freq_limit_ms, oc_freq_limit_us, input*1000);
+__store_int(max_non_oc_freq, max_non_oc_freq, verify_freq(&input), input, recalculate_freq_limits());
+__store_int(oc_freq_limit_ms, oc_freq_limit_us, true, input*1000, recalculate_freq_limits());
 
 __store_int(suspend_sampling_rate, suspend_sampling_rate,
 		input >= min_sampling_rate,
@@ -578,7 +624,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 			freq_target = dbs_tuners_ins.input_boost_freq;
 		}
 		if (policy->cur < freq_target) {
-			pr_debug("Boosting freq from %d to %d", this_dbs_info->requested_freq, freq_target);
+			pr_debug("Boosting freq from %d to %d, dt=%llu us\n", this_dbs_info->requested_freq, freq_target, ktime_to_us(ktime_get())-last_input_time);
 			this_dbs_info->requested_freq = freq_target;
 			__cpufreq_driver_target(policy, freq_target, CPUFREQ_RELATION_H);
 			return;
@@ -587,20 +633,8 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		//TODO move it to a separate func
 		//find hard limit
 		//TODO cant decide which of the two should be first...
-		if (dbs_tuners_ins.max_non_oc_freq)
-			max_freq_hard = dbs_tuners_ins.max_non_oc_freq;
-		else if (dbs_tuners_ins.power_optimal_freq)
-			max_freq_hard = dbs_tuners_ins.power_optimal_freq;
-		else if (dbs_tuners_ins.suspend_max_freq)
-			max_freq_hard = dbs_tuners_ins.suspend_max_freq;
-
-		//find soft limit
-		if (dbs_tuners_ins.suspend_max_freq)
-			max_freq_soft = dbs_tuners_ins.suspend_max_freq;
-		else if (dbs_tuners_ins.power_optimal_freq)
-			max_freq_soft = dbs_tuners_ins.power_optimal_freq;
-		else if (dbs_tuners_ins.max_non_oc_freq)
-			max_freq_hard = dbs_tuners_ins.max_non_oc_freq;
+		max_freq_hard = dbs_tuners_ins._suspend_max_freq_hard;
+		max_freq_soft = dbs_tuners_ins._suspend_max_freq_soft;
 	}
 
 	//TODO check oc time limit here
@@ -619,10 +653,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		//calculate soft freq limit
 		//TODO move it to a separate func
 		if (standby) {
-			if (dbs_tuners_ins.max_non_oc_freq && ((dbs_tuners_ins.max_non_oc_freq < policy->max && dbs_tuners_ins.oc_freq_limit_us == 0) || dbs_tuners_ins.power_optimal_freq == 0))
-				max_freq_soft = dbs_tuners_ins.max_non_oc_freq;
-			else if (dbs_tuners_ins.power_optimal_freq)
-				max_freq_soft = dbs_tuners_ins.power_optimal_freq;
+			max_freq_soft = dbs_tuners_ins._standby_max_freq_soft;
 		}
 
 		if (max_freq_soft > max_freq_hard)
@@ -670,7 +701,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		if (active) {
 			if (++(this_dbs_info->standby_counter) >= dbs_tuners_ins.standby_delay_factor) {
 				standby = true;
-				pr_debug("Entering standby");
+				pr_debug("Entering standby. dt=%lu ms", (unsigned long int)(ktime_to_us(ktime_get())-last_input_time)/1000);
 			}
 
 			//TODO move all state management code to functions and just call go_active, go_suspend etc...
@@ -771,8 +802,13 @@ static void dbs_resume(struct early_suspend *handler)
 	standby = false;
 	delay = dbs_tuners_ins.sampling_rate;
 
+	pr_debug("Early resume. dt=%lu ms", (unsigned long int)(ktime_to_us(ktime_get())-last_input_time)/1000);
+
+	//just a little cheat... :)
+	//getting here after pressing power button takes 50-100ms... by this time input boost can as well be over...
+	last_input_time = ktime_to_us(ktime_get());
+
 	//set max freq
-	//FIXME doesn't work when suspend_max_freq is set, which doesn't make sense...
 	__cpufreq_driver_target(
 			policy,
 			policy->max, CPUFREQ_RELATION_H);
@@ -801,12 +837,15 @@ static void hotplug_input_event(struct input_handle *handle,
 	delay = dbs_tuners_ins.sampling_rate;
 
 	now = ktime_to_us(ktime_get());
+	pr_debug("Input detected at %llu", now);
 	if (now - last_input_time < dbs_tuners_ins.input_boost_us || policy->cur >= dbs_tuners_ins.input_boost_freq) {
 		//if input events occur, keep the boost running, just don't flush delayed work
+		pr_debug(" - boost trigger not needed: dt=%llu us, freq=%d MHz\n", now - last_input_time, policy->cur/1000);
 		last_input_time = now;
 		return;
 	}
 
+	pr_debug(" - triggering boost\n");
 	last_input_time = now;
 
 	if (__cancel_delayed_work(&dbs_info->work) > 0) {
@@ -950,6 +989,7 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 				    latency * LATENCY_MULTIPLIER));
 			dbs_tuners_ins.standby_sampling_rate = dbs_tuners_ins.sampling_rate;
 			dbs_tuners_ins.suspend_sampling_rate = dbs_tuners_ins.sampling_rate;
+			recalculate_freq_limits();
 
 			cpufreq_register_notifier(
 					&dbs_cpufreq_notifier_block,
@@ -994,15 +1034,20 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		break;
 
 	case CPUFREQ_GOV_LIMITS:
+		pr_debug("dynamic - gov limits %d %d %d\n", policy->min, this_dbs_info->cur_policy->cur, policy->max);
 		mutex_lock(&this_dbs_info->timer_mutex);
-		if (policy->max < this_dbs_info->cur_policy->cur)
+		if (policy->max < this_dbs_info->cur_policy->cur) {
 			__cpufreq_driver_target(
 					this_dbs_info->cur_policy,
 					policy->max, CPUFREQ_RELATION_H);
-		else if (policy->min > this_dbs_info->cur_policy->cur)
+			this_dbs_info->requested_freq = policy->max;
+		} else if (policy->min > this_dbs_info->cur_policy->cur) {
 			__cpufreq_driver_target(
 					this_dbs_info->cur_policy,
 					policy->min, CPUFREQ_RELATION_L);
+			this_dbs_info->requested_freq = policy->min;
+		}
+		recalculate_freq_limits();
 		mutex_unlock(&this_dbs_info->timer_mutex);
 
 		break;
