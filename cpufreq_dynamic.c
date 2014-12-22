@@ -342,7 +342,7 @@ store_int_conv(input_boost_ms, input_boost_us, input*1000);
 store_bounded_int(standby_delay_factor, standby_delay_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 store_bounded_int(standby_sampling_up_factor, standby_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 store_bounded_int(suspend_sampling_up_factor, suspend_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
-store_int_cond(power_optimal_freq, power_optimal_freq, verify_freq(&input));
+store_int_cond(power_optimal_freq, power_optimal_freq, input==0 || verify_freq(&input));
 store_bounded_int(high_freq_sampling_up_factor, high_freq_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 
 store_int_cond(max_non_oc_freq, max_non_oc_freq, verify_freq(&input));
@@ -585,23 +585,34 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		}
 	} else if (suspend) {
 		//TODO move it to a separate func
-		if (dbs_tuners_ins.suspend_max_freq) {
-			max_freq_soft = dbs_tuners_ins.suspend_max_freq;
-			if (dbs_tuners_ins.power_optimal_freq)
-				max_freq_hard = dbs_tuners_ins.power_optimal_freq;
-			else if (dbs_tuners_ins.max_non_oc_freq)
-				max_freq_hard = dbs_tuners_ins.max_non_oc_freq;
-		} else if (dbs_tuners_ins.max_non_oc_freq) {
-			if (dbs_tuners_ins.power_optimal_freq)
-				max_freq_soft = dbs_tuners_ins.power_optimal_freq;
+		//find hard limit
+		//TODO cant decide which of the two should be first...
+		if (dbs_tuners_ins.max_non_oc_freq)
 			max_freq_hard = dbs_tuners_ins.max_non_oc_freq;
-		}
+		else if (dbs_tuners_ins.power_optimal_freq)
+			max_freq_hard = dbs_tuners_ins.power_optimal_freq;
+		else if (dbs_tuners_ins.suspend_max_freq)
+			max_freq_hard = dbs_tuners_ins.suspend_max_freq;
+
+		//find soft limit
+		if (dbs_tuners_ins.suspend_max_freq)
+			max_freq_soft = dbs_tuners_ins.suspend_max_freq;
+		else if (dbs_tuners_ins.power_optimal_freq)
+			max_freq_soft = dbs_tuners_ins.power_optimal_freq;
+		else if (dbs_tuners_ins.max_non_oc_freq)
+			max_freq_hard = dbs_tuners_ins.max_non_oc_freq;
 	}
 
 	//TODO check oc time limit here
 
 	if (unlikely(max_freq_hard > policy->max))
 		max_freq_hard = policy->max;
+
+	if (this_dbs_info->requested_freq > max_freq_hard) {
+		this_dbs_info->requested_freq = max_freq_hard;
+		__cpufreq_driver_target(policy, max_freq_hard, CPUFREQ_RELATION_H);
+		return;
+	}
 
 	/* Check for frequency increase */
 	if (max_load > (active ? dbs_tuners_ins.up_threshold : 99)) {
