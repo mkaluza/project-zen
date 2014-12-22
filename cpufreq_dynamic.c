@@ -127,7 +127,7 @@ static struct dbs_tuners {
 	unsigned int ignore_nice;
 	unsigned int io_is_busy;
 
-	unsigned int optimal_freq;
+	unsigned int power_optimal_freq;
 	unsigned int high_freq_sampling_up_factor;
 
 	unsigned int input_boost_freq;
@@ -149,7 +149,7 @@ static struct dbs_tuners {
 	.input_boost_freq = 400000,
 	.input_boost_us = 100*1000,
 	.suspend_max_freq = 0,
-	.optimal_freq = 800000,
+	.power_optimal_freq = 800000,
 	.high_freq_sampling_up_factor = 2,
 };
 
@@ -294,7 +294,7 @@ show_one(input_boost_ms, input_boost_us/1000);
 
 show_one(suspend_max_freq, suspend_max_freq);
 
-show_one(optimal_freq, optimal_freq);
+show_one(power_optimal_freq, power_optimal_freq);
 show_one(high_freq_sampling_up_factor, high_freq_sampling_up_factor);
 
 static bool verify_freq(unsigned int *freq) {
@@ -336,7 +336,7 @@ store_int_conv(input_boost_ms, input_boost_us, input*1000);
 store_bounded_int(standby_delay_factor, standby_delay_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 store_bounded_int(standby_sampling_up_factor, standby_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 store_bounded_int(suspend_sampling_up_factor, suspend_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
-store_int_cond(optimal_freq, optimal_freq, verify_freq(&input));
+store_int_cond(power_optimal_freq, power_optimal_freq, verify_freq(&input));
 store_bounded_int(high_freq_sampling_up_factor, high_freq_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 
 __store_int(suspend_sampling_rate, suspend_sampling_rate,
@@ -421,7 +421,7 @@ define_one_global_rw(suspend_max_freq);
 define_one_global_rw(input_boost_freq);
 define_one_global_rw(input_boost_ms);
 
-define_one_global_rw(optimal_freq);
+define_one_global_rw(power_optimal_freq);
 define_one_global_rw(high_freq_sampling_up_factor);
 
 static struct attribute *dbs_attributes[] = {
@@ -441,7 +441,7 @@ static struct attribute *dbs_attributes[] = {
 	&input_boost_freq.attr,
 	&input_boost_ms.attr,
 	&suspend_max_freq.attr,
-	&optimal_freq.attr,
+	&power_optimal_freq.attr,
 	&high_freq_sampling_up_factor.attr,
 	NULL
 };
@@ -559,9 +559,9 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 		if (suspend)
 			max_freq = dbs_tuners_ins.suspend_max_freq ? dbs_tuners_ins.suspend_max_freq :
-			       dbs_tuners_ins.optimal_freq ? dbs_tuners_ins.optimal_freq : policy->max;
+			       dbs_tuners_ins.power_optimal_freq ? dbs_tuners_ins.power_optimal_freq : policy->max;
 		else if (standby)
-			max_freq = dbs_tuners_ins.optimal_freq ? dbs_tuners_ins.optimal_freq : policy->max;
+			max_freq = dbs_tuners_ins.power_optimal_freq ? dbs_tuners_ins.power_optimal_freq : policy->max;
 		else
 			max_freq = policy->max;
 
@@ -581,7 +581,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 				return;
 		} else {
 			//if we're at or above optimal freq, then delay freq increase by high_freq_sampling_up_factor
-			if (dbs_tuners_ins.optimal_freq && policy->cur >= dbs_tuners_ins.optimal_freq && ++(this_dbs_info->sampling_up_counter) < dbs_tuners_ins.high_freq_sampling_up_factor)
+			if (dbs_tuners_ins.power_optimal_freq && policy->cur >= dbs_tuners_ins.power_optimal_freq && ++(this_dbs_info->sampling_up_counter) < dbs_tuners_ins.high_freq_sampling_up_factor)
 				return;
 		}
 
