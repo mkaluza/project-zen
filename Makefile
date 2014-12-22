@@ -28,6 +28,7 @@ dynamic_install: dynamic
 	adb shell rmmod cpufreq_dynamic
 	adb push cpufreq_dynamic.ko /system/lib/modules/
 	adb shell insmod /system/lib/modules/cpufreq_dynamic.ko
+	adb shell "echo \"file $(PWD)/cpufreq_dynamic.c +pfl\" > /d/dynamic_debug/control"
 	adb shell "echo dynamic > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"
 
 clean:
