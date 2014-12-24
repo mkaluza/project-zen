@@ -115,27 +115,28 @@ static u64 last_input_time = 0;
 static DEFINE_MUTEX(dbs_mutex);
 
 static struct dbs_tuners {
-	unsigned int sampling_rate;
-	unsigned int standby_sampling_rate;
-	unsigned int suspend_sampling_rate;
-	unsigned int suspend_sampling_up_factor;
-	unsigned int standby_sampling_up_factor;
-	unsigned int standby_delay_factor;
-	unsigned int sampling_down_factor;
-	unsigned int sampling_down_factor_relax_khz;
+	unsigned int input_boost_freq;
+	unsigned int input_boost_us;
+	unsigned int power_optimal_freq;
+	unsigned int high_freq_sampling_up_factor;
+
 	unsigned int up_threshold;
 	unsigned int down_differential;
 	unsigned int ignore_nice;
 	unsigned int io_is_busy;
 
-	unsigned int power_optimal_freq;
-	unsigned int high_freq_sampling_up_factor;
-
+	unsigned int sampling_rate;
+	unsigned int sampling_down_factor;
+	unsigned int sampling_down_factor_relax_khz;
 	unsigned int max_non_oc_freq;
 	unsigned int oc_freq_limit_us;
+	unsigned int standby_delay_factor;
 
-	unsigned int input_boost_freq;
-	unsigned int input_boost_us;
+	unsigned int standby_sampling_rate;
+	unsigned int standby_sampling_up_factor;
+
+	unsigned int suspend_sampling_rate;
+	unsigned int suspend_sampling_up_factor;
 	unsigned int suspend_max_freq;
 
 //internal
