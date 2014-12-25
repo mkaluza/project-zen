@@ -361,7 +361,7 @@ show_one(power_optimal_freq, power_optimal_freq);
 show_one(high_freq_sampling_up_factor, high_freq_sampling_up_factor);
 
 show_one(max_non_oc_freq, max_non_oc_freq);
-show_one(oc_freq_limit_ms, oc_freq_limit_us/1000);
+show_one(oc_freq_boost_ms, oc_freq_limit_us/1000);
 
 static bool verify_freq(unsigned int *freq) {
 	unsigned int idx, ret;
@@ -408,7 +408,7 @@ store_bounded_int(high_freq_sampling_up_factor, high_freq_sampling_up_factor, 1,
 __store_int(standby_threshold_freq, standby_threshold_freq, input==0 || verify_freq(&input), input, recalculate_freq_limits());
 
 __store_int(max_non_oc_freq, max_non_oc_freq, verify_freq(&input), input, recalculate_freq_limits());
-__store_int(oc_freq_limit_ms, oc_freq_limit_us, true, input*1000, recalculate_freq_limits());
+__store_int(oc_freq_boost_ms, oc_freq_limit_us, true, input*1000, recalculate_freq_limits());
 
 __store_int(suspend_sampling_rate, suspend_sampling_rate,
 		input >= min_sampling_rate,
@@ -497,7 +497,7 @@ define_one_global_rw(power_optimal_freq);
 define_one_global_rw(high_freq_sampling_up_factor);
 
 define_one_global_rw(max_non_oc_freq);
-define_one_global_rw(oc_freq_limit_ms);
+define_one_global_rw(oc_freq_boost_ms);
 
 static struct attribute *dbs_attributes[] = {
 	&input_boost_freq.attr,
@@ -514,7 +514,7 @@ static struct attribute *dbs_attributes[] = {
 	&sampling_down_factor.attr,
 	&sampling_down_factor_relax_khz.attr,
 	&max_non_oc_freq.attr,
-	&oc_freq_limit_ms.attr,
+	&oc_freq_boost_ms.attr,
 	&standby_delay_factor.attr,
 	&standby_threshold_freq.attr,
 
