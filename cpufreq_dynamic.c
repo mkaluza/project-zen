@@ -152,7 +152,7 @@ static struct dbs_tuners {
 	.suspend_sampling_up_factor = 7,
 	.standby_sampling_up_factor = 4,
 	.standby_delay_factor = 1,
-	.standby_threshold_freq = 100000,
+	.standby_threshold_freq = 0,
 	.sampling_down_factor = 2,
 	.sampling_down_factor_relax_khz = 500000,
 
@@ -306,7 +306,7 @@ static void recalculate_freq_limits(void) {
 		else
 			dbs_tuners_ins._oc_limit = 0;
 
-		dbs_tuners_ins._standby_threshold_freq = max(policy->min, dbs_tuners_ins.standby_threshold_freq);
+		dbs_tuners_ins._standby_threshold_freq = policy->min + dbs_tuners_ins.standby_threshold_freq;
 		pr_debug("calculated limits: _standby_max_freq_soft: %d, _suspend_max_freq_soft: %d, _suspend_max_freq_hard:%d, _oc_limit: %d\n",
 				dbs_tuners_ins._standby_max_freq_soft, dbs_tuners_ins._suspend_max_freq_soft, dbs_tuners_ins._suspend_max_freq_hard, dbs_tuners_ins._oc_limit);
 }
@@ -405,7 +405,7 @@ store_bounded_int(suspend_sampling_up_factor, suspend_sampling_up_factor, 1, MAX
 __store_int(power_optimal_freq, power_optimal_freq, input==0 || verify_freq(&input), input, recalculate_freq_limits());
 store_bounded_int(high_freq_sampling_up_factor, high_freq_sampling_up_factor, 1, MAX_SAMPLING_DOWN_FACTOR);
 
-__store_int(standby_threshold_freq, standby_threshold_freq, input==0 || verify_freq(&input), input, recalculate_freq_limits());
+__store_int(standby_threshold_freq, standby_threshold_freq, input>=0, input, recalculate_freq_limits());
 
 __store_int(max_non_oc_freq, max_non_oc_freq, verify_freq(&input), input, recalculate_freq_limits());
 __store_int(oc_freq_boost_ms, oc_freq_boost_ms, true, input, recalculate_freq_limits());
