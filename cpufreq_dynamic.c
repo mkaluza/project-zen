@@ -159,16 +159,16 @@ static struct dbs_tuners {
 	.standby_delay_factor = 1,
 	.standby_threshold_freq = 0,
 
-	.standby_sampling_rate = 20000,
+	.sampling_rate = 2,
 	.sampling_down_factor = 2,
 	.sampling_down_factor_relax_khz = 500000,
 	.max_non_oc_freq = 1000000,
 	.oc_freq_boost_ms = 1500,
 
-	.standby_sampling_rate = 30000,
+	.standby_sampling_rate = 3,
 	.standby_sampling_up_factor = 5,
 
-	.suspend_sampling_rate = 50000,
+	.suspend_sampling_rate = 5,
 	.suspend_sampling_up_factor = 5,
 	.suspend_max_freq = 600000,
 };
@@ -1046,7 +1046,7 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 				usecs_to_jiffies(max(min_sampling_rate,
 				    latency * LATENCY_MULTIPLIER));
 			*/
-			dbs_tuners_ins.sampling_rate = max(dbs_tuners_ins.sampling_rate, min_sampling_rate);
+			dbs_tuners_ins.sampling_rate = max(dbs_tuners_ins.sampling_rate, usecs_to_jiffies(min_sampling_rate));
 			dbs_tuners_ins.standby_sampling_rate = max(dbs_tuners_ins.standby_sampling_rate, dbs_tuners_ins.sampling_rate);
 			dbs_tuners_ins.suspend_sampling_rate = max(dbs_tuners_ins.suspend_sampling_rate, dbs_tuners_ins.sampling_rate);
 			recalculate_freq_limits();
