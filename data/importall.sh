@@ -4,7 +4,7 @@ set -x
 
 pipe=`mktemp -u`
 mkfifo $pipe
-for i in $1/*.gz; do zcat $i; done | sed -e "s/[a-z][^\ ]*.//g" > $pipe&
+for i in $1/*.gz; do zcat $i; done | sed -e "s/[a-z][^\ ]*.//g" | awk '{if (NF==22) print $0;}'> $pipe&
 
 sqlite3 $1/db.sqlite3 << _EOF
 pragma journal_mode=memory;
