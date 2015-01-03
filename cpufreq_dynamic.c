@@ -870,10 +870,12 @@ static void cpufreq_dynamic_resume(struct work_struct *work)
 	}
 }
 
+/*
 static void cpufreq_dynamic_suspend(struct work_struct *work)
 {
 	//use this func when there's something useful to do here ;)
 }
+*/
 static void dbs_suspend(struct early_suspend *handler)
 {
 	//schedule_work(&suspend_work);
@@ -1060,7 +1062,7 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 				usecs_to_jiffies(max(min_sampling_rate,
 				    latency * LATENCY_MULTIPLIER));
 			*/
-			dbs_tuners_ins.sampling_rate = max(dbs_tuners_ins.sampling_rate, usecs_to_jiffies(min_sampling_rate));
+			dbs_tuners_ins.sampling_rate = max(dbs_tuners_ins.sampling_rate, (unsigned int) usecs_to_jiffies(min_sampling_rate));
 			dbs_tuners_ins.standby_sampling_rate = max(dbs_tuners_ins.standby_sampling_rate, dbs_tuners_ins.sampling_rate);
 			dbs_tuners_ins.suspend_sampling_rate = max(dbs_tuners_ins.suspend_sampling_rate, dbs_tuners_ins.sampling_rate);
 			recalculate_freq_limits();
