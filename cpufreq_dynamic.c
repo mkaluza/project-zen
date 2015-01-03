@@ -883,7 +883,7 @@ static void dbs_suspend(struct early_suspend *handler)
 
 static void dbs_resume(struct early_suspend *handler)
 {
-	schedule_work(&resume_work);
+	queue_work(dbs_wq, &resume_work);
 }
 
 static struct early_suspend dbs_early_suspend = {
