@@ -920,7 +920,7 @@ static void hotplug_input_event(struct input_handle *handle,
 	last_input_time = now;
 
 	if (__cancel_delayed_work(&dbs_info->work) > 0) {
-		queue_delayed_work_on(dbs_info->cpu, dbs_wq, &dbs_info->work, 0);
+		queue_work_on(dbs_info->cpu, dbs_wq, &dbs_info->work.work);
 	}
 
 }
