@@ -174,6 +174,8 @@ static struct dbs_tuners {
 };
 
 static struct workqueue_struct *dbs_wq;
+//static struct work_struct suspend_work;
+static struct work_struct resume_work;
 
 static unsigned int delay;
 module_param(delay, uint, 0644);
@@ -840,13 +842,7 @@ static inline void dbs_timer_exit(struct cpu_dbs_info_s *dbs_info)
 }
 
 /* early_suspend */
-static void dbs_suspend(struct early_suspend *handler)
-{
-	suspend = true;
-	delay = dbs_tuners_ins.suspend_sampling_rate;
-}
-
-static void dbs_resume(struct early_suspend *handler)
+static void cpufreq_dynamic_resume(struct work_struct *work)
 {
 	//unsigned int cpu;
 	struct cpu_dbs_info_s *this_dbs_info = &per_cpu(cs_cpu_dbs_info, 0);
@@ -872,6 +868,22 @@ static void dbs_resume(struct early_suspend *handler)
 		this_dbs_info = &per_cpu(cs_cpu_dbs_info, cpu);
 		this_dbs_info->requested_freq = policy->max;
 	}
+}
+
+static void cpufreq_dynamic_suspend(struct work_struct *work)
+{
+	//use this func when there's something useful to do here ;)
+}
+static void dbs_suspend(struct early_suspend *handler)
+{
+	//schedule_work(&suspend_work);
+	suspend = true;
+	delay = dbs_tuners_ins.suspend_sampling_rate;
+}
+
+static void dbs_resume(struct early_suspend *handler)
+{
+	schedule_work(&resume_work);
 }
 
 static struct early_suspend dbs_early_suspend = {
@@ -1150,6 +1162,8 @@ static int __init cpufreq_gov_dbs_init(void)
 			MIN_SAMPLING_RATE_RATIO * jiffies_to_usecs(10);
 	}
 
+	INIT_WORK(&resume_work, cpufreq_dynamic_resume);
+	//INIT_WORK(&suspend_work, cpufreq_dynamic_suspend);
 	dbs_wq = alloc_workqueue("dynamic_dbs_wq", WQ_HIGHPRI, 0);
 	if (!dbs_wq) {
 		printk(KERN_ERR "Failed to create dynamic_dbs_wq workqueue\n");
