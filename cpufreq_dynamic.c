@@ -762,7 +762,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 	/* standby mode activation logic */
 	if (policy->cur <= dbs_tuners_ins._standby_threshold_freq) {
-		if (active) {
+		if (active && !boosted) {
 			if (++(this_dbs_info->standby_counter) >= dbs_tuners_ins.standby_delay_factor) {
 				standby = true;
 				pr_debug("Entering standby. dt=%lu ms", (unsigned long int)(ktime_to_us(ktime_get())-last_input_time)/1000);
