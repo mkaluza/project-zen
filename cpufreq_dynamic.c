@@ -653,9 +653,12 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	}
 
 	/* frequency changing logic starts here */
+
+	/* input boost logic
+	 */
 	if (boosted) {
 		unsigned int freq_target;
-	        if (suspend) {
+		if (suspend) {
 			if (dbs_tuners_ins.max_non_oc_freq) {
 				//TODO optimize this
 				//this is to avoid a situation where some process is spinning in the background
@@ -684,6 +687,8 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		max_freq_soft = dbs_tuners_ins._suspend_max_freq_soft;
 	}
 
+	/* calculate turbo boost limits */
+
 	if (active && dbs_tuners_ins.max_non_oc_freq && dbs_tuners_ins.oc_freq_boost_ms) {
 		if (this_dbs_info->oc_boost_cycles == 0)
 			max_freq_hard = dbs_tuners_ins.max_non_oc_freq;
@@ -694,6 +699,8 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 			pr_debug("oc limit: %d (%d), freq_delta: %d, soft: %d, hard: %d",
 				this_dbs_info->oc_boost_cycles, dbs_tuners_ins._oc_limit, oc_freq_delta, max_freq_soft, max_freq_hard);
 	}
+
+	/* calculate and enforce frequency hard limit */
 
 	if (unlikely(max_freq_hard > policy->max))
 		max_freq_hard = policy->max;
@@ -722,6 +729,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 		this_dbs_info->standby_counter = 0;
 
+		/* frequency increase delays */
 		if (suspend) {
 			if (++(this_dbs_info->sampling_up_counter) < dbs_tuners_ins.suspend_sampling_up_factor)
 				return;
@@ -748,11 +756,11 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		return;
 	}
 
+
+	/* if the load fell below up_threshold, reset frequency increase delay counter */
 	this_dbs_info->sampling_up_counter = 0;
 
-	/*
-	 * if we cannot reduce the frequency anymore, break out early
-	 */
+	/* standby mode activation logic */
 	if (policy->cur <= dbs_tuners_ins._standby_threshold_freq) {
 		if (active) {
 			if (++(this_dbs_info->standby_counter) >= dbs_tuners_ins.standby_delay_factor) {
@@ -764,6 +772,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 			//TODO move all state management code to functions and just call go_active, go_suspend etc...
 			delay = dbs_tuners_ins.standby_sampling_rate;
 		}
+		/* if we cannot reduce the frequency anymore, break out early */
 		if (policy->cur == policy->min) return;
 	}
 	/*
